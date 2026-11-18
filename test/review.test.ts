@@ -1,5 +1,5 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tempDir } from './root.js';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseReply } from '../src/review.js';
@@ -14,7 +14,7 @@ process.stdout.write(readFileSync(process.env.FAKE_REPLY, 'utf8'));
 
 function setup(): { r: Repo; run(reply: string, args?: string[]): { code: number; out: string; err: string; prompt: string } } {
   const r = makeRepo({ 'src/app.js': 'a\n', 'REVIEW.md': '## R1 no console.log\nTrigger: any .js file.\n' }, baseConfig({ review: { command: 'claude', args: ['-p'], rulesFile: 'REVIEW.md', timeoutSec: 60 } }));
-  const tools = mkdtempSync(join(tmpdir(), 'vlite-fake-'));
+  const tools = tempDir('fake-');
   writeFileSync(join(tools, 'fake.mjs'), FAKE);
   return {
     r,

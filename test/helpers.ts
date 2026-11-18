@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tempDir } from './root.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,8 +17,8 @@ export interface Repo {
 
 /** A throwaway repo: commit on main holds vlite.json (and files), then a feature branch is checked out. */
 export function makeRepo(files: Record<string, string> = {}, config?: object): Repo {
-  const dir = mkdtempSync(join(tmpdir(), 'vlite-repo-'));
-  const home = mkdtempSync(join(tmpdir(), 'vlite-home-'));
+  const dir = tempDir('repo-');
+  const home = tempDir('home-');
   const env: NodeJS.ProcessEnv = { ...process.env, VLITE_HOME: home, GIT_CONFIG_NOSYSTEM: '1' };
   delete env['GIT_INDEX_FILE'];
   const git = (...args: string[]): string => {
