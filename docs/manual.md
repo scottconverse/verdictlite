@@ -636,8 +636,7 @@ The staged tree must match the tree you stamped. Run `git add -A`, stamp again
 and commit. Check that evidence files are ignored by git.
 
 **The stop check is slow.**
-It hashes the whole working tree each time and runs about 15 git commands. On
-Windows that is about 1 to 2 seconds before any check runs. Large repos take
+It hashes the whole working tree each time and runs about 15 git commands. This adds a short wait before any check runs. The time is not measured yet. Large repos take
 longer. Your checks add their own time.
 
 **A check times out in the hook but not by hand.**

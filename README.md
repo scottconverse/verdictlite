@@ -410,7 +410,7 @@ Delete the folder to reset VerdictLite for a repo.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
-  git commands. On Windows that is about 1 to 2 seconds before any check runs.
+  git commands. This adds a short wait before any check runs. The time is not measured yet.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
