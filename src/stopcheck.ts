@@ -34,6 +34,8 @@ function readHookInput(): HookInput {
 
 /** The Claude Code Stop hook. Always exits 0: it speaks through JSON on stdout, and fails open on its own errors. */
 export async function stopCheck(opts: { repo?: string; session?: string }): Promise<number> {
+  // A review session (started by `vlite review`) must never run checks or be blocked.
+  if (process.env['VLITE_REVIEWER'] === '1') return 0;
   const input = opts.session ? {} : readHookInput();
   const dir = resolve(input.cwd ?? opts.repo ?? process.cwd());
   try {
