@@ -261,6 +261,9 @@ Here is one session from start to end.
    file, the built-in `test-tamper` check runs. See [section 11](#11-test-tamper-rules-and-test-removalsmd).
 7. **Your checks.** For each part whose `paths` match a changed file, its checks
    run in order. The first failing check stops that part. Other parts still run.
+   A template part runs once for each module that changed. A part whose
+   `requires` files are missing is skipped. See
+   [Part templates](#part-templates).
 8. **All pass:** VerdictLite records the tree as passed and the agent stops.
    **Something fails:** it blocks the stop and tells the agent what failed. The
    agent keeps working. See [section 5](#5-read-a-block-message).
@@ -661,7 +664,8 @@ To remove the command, run `npm unlink -g verdictlite` and delete the clone.
 ## 15. Config reference: vlite.json
 
 `vlite.json` is a JSON object. Unknown keys are ignored. A bad value stops the
-command with a list of every error.
+command with a list of every error. An old `prChecks` field is ignored with a
+one-line warning.
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
@@ -671,17 +675,18 @@ command with a list of every error.
 | `codeDespiteDocs` | list of globs | `[]` | Files that match `docs` but count as code. |
 | `parts` | list | `[]` | Areas of the repo and their checks. See below. |
 | `parts[].name` | string | required | Name shown in messages, as `name/check`. |
-| `parts[].paths` | list of globs | required, at least one | A changed file matching one of these runs the part. |
+| `parts[].paths` | list of globs | required, at least one | A changed file matching one of these runs the part. A path with `{name}` makes the part a template. See [Part templates](#part-templates). |
+| `parts[].requires` | list of paths | `[]` | Paths, from the repo root, that must exist for the part to run. If one is missing, the part is skipped and `stop.jsonl` says why. |
 | `parts[].cwd` | string | `"."` | Folder, from the repo root, where checks run. |
 | `parts[].checks` | list | required, at least one | The checks, run in order. |
 | `checks[].name` | string | required | Check name. |
 | `checks[].run` | string | required | Command line. Runs through the shell: `cmd.exe` on Windows, `sh` elsewhere. |
 | `checks[].cwd` | string | the part's `cwd` | Folder for this check. |
 | `checks[].timeoutSec` | number | `600` | Seconds before the check is killed and counts as failed. |
-| `prChecks` | list of checks | `[]` | Checked for errors but **not run by any command in 0.1.0**. |
 | `tests.paths` | list of globs | `[]` | Test files for the tamper check. |
 | `tests.removalsLog` | string | `"TEST-REMOVALS.md"` | Where removed tests are written down. |
 | `maxRounds` | whole number | `3` | The failing round that hands off to a person. |
+| `maxExpandedParts` | whole number | `12` | The most parts one template may make in one stop check. |
 | `gate.mode` | `"off"`, `"observe"`, `"enforce"` | `"observe"` | Commit gate mode. |
 | `review.command` | string | `"claude"` | Reviewer command. The env var `VLITE_REVIEW_CMD` overrides it. |
 | `review.args` | list of strings | `["-p"]` | Arguments for the reviewer. |
@@ -721,6 +726,55 @@ A file is docs when it matches `docs` and does not match `codeDespiteDocs`.
   "review": { "command": "claude", "args": ["-p", "--model", "sonnet"], "rulesFile": "REVIEW.md", "timeoutSec": 900 }
 }
 ```
+
+### Part templates
+
+A part with `{name}` in its `paths` is a template. VerdictLite makes one part
+for each module that changed. `{name}` stands for one folder name.
+
+- `{name}` must be a whole folder name, like `src/{name}/**`.
+  `src/lib_{name}/**` is an error.
+- Every path of a template part needs `{name}`. So does its `name`, so each
+  module's part has its own name.
+- `{name}` is filled in the part's `name`, `paths`, `requires` and `cwd`, and
+  in each check's `run` and `cwd`. Other text in braces is left alone.
+- `{name}` in a part whose paths have no `{name}` is an error. `{name}` is the
+  only placeholder. Any other `{...}` in `paths` is an error.
+- The changed file must be inside the folder. With `src/{name}/**`,
+  `src/a/x.py` gives `a`. `src/x.py` gives nothing.
+- **Safe names only.** The folder name goes into a shell command. It is used
+  only when it starts with a letter or digit and has only letters, digits,
+  `_`, `.` and `-`. Any other folder name (with spaces, `;`, `$`, quotes and so
+  on) does not match the template, and nothing runs for it.
+- Each module runs once, even when files in several of its paths changed.
+  Modules run in name order.
+- **Limit.** If more than `maxExpandedParts` modules (default 12) changed for
+  one template, none of them run. A check named
+  `<template name> (too many parts)` fails instead. Its message lists the
+  parts. Run the wider check by hand, or raise the limit on the base branch.
+
+### How to: run the tests of the module that changed
+
+Say your code is in `civiccast/<module>/` and each module's tests are in
+`tests/<module>/`. A fixed check runs the same tests for every change. A
+template runs only the tests of the module that changed:
+
+```json
+{ "name": "backend:{name}",
+  "paths": ["civiccast/{name}/**", "tests/{name}/**"],
+  "requires": ["tests/{name}"],
+  "cwd": ".",
+  "checks": [ { "name": "tests", "run": "uv run --no-sync pytest tests/{name} -q -x", "timeoutSec": 600 } ] }
+```
+
+- A change to `civiccast/egress/net.py` runs `pytest tests/egress`. Messages
+  call the part `backend:egress`.
+- A change in two modules runs both test folders.
+- A module with no `tests/<module>` folder is skipped. `requires` does this.
+  The `stop.jsonl` line says
+  `"skipped": {"backend:foo": "requires missing: tests/foo"}`.
+- A file right in `civiccast/` is in no module, so this part does not run for
+  it. Add a plain part for those files if they need checks.
 
 ## 16. Command reference
 
@@ -769,15 +823,12 @@ the `claude` CLI). The other commands run on your machine.
 **Do I have to use `vlite review`?**
 No. A `verify` stamp alone gives the method `verify`.
 
-**What about the `prChecks` field?**
-It is checked for errors but no command runs it in 0.1.0.
-
 **Is this made by Anthropic?**
 No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.0 is the first release, built on 2026-11-18. It has 94
+Early. Version 0.1.0 is the first release, built on 2026-11-18. It has 111
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

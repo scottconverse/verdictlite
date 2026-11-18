@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { refExists, showFile } from './git.js';
+import { PLACEHOLDER } from './glob.js';
 
 export interface Check {
   name: string;
@@ -12,8 +13,12 @@ export interface Check {
 export interface Part {
   name: string;
   paths: string[];
+  /** Repo-relative paths that must exist in the working tree, or the part is skipped. */
+  requires: string[];
   cwd: string;
   checks: Check[];
+  /** True when a path holds {name}: one concrete part is made per module that changed. */
+  template: boolean;
 }
 
 export type GateMode = 'off' | 'observe' | 'enforce';
@@ -24,7 +29,8 @@ export interface Config {
   docs: string[];
   codeDespiteDocs: string[];
   parts: Part[];
-  prChecks: Check[];
+  /** Most concrete parts one template may make in one run. */
+  maxExpandedParts: number;
   tests: { paths: string[]; removalsLog: string };
   maxRounds: number;
   gate: { mode: GateMode };
@@ -101,6 +107,43 @@ function posNum(v: unknown, at: string, errors: string[], fallback: number): num
   return fallback;
 }
 
+let warnedPrChecks = false;
+
+/** A placeholder token such as {name} or {module}. */
+const TOKEN = /\{[^{}/]*\}/g;
+
+/** Checks the {name} rules of one part. Returns true when the part is a template. */
+function placeholderRules(p: { name: string; paths: string[]; requires: string[]; cwd: string; checks: Check[] }, at: string, errors: string[]): boolean {
+  let template = false;
+  p.paths.forEach((path, i) => {
+    for (const token of path.match(TOKEN) ?? []) {
+      if (token !== PLACEHOLDER) errors.push(`${at}.paths[${i}] uses "${token}"; the only placeholder is {name}`);
+    }
+    if (!path.includes(PLACEHOLDER)) return;
+    template = true;
+    if (path.split('/').some((seg) => seg.includes(PLACEHOLDER) && seg !== PLACEHOLDER)) {
+      errors.push(`${at}.paths[${i}]: {name} must be a whole path segment, like "src/{name}/**"`);
+    }
+  });
+  const uses: string[] = [];
+  if (p.name.includes(PLACEHOLDER)) uses.push('"name"');
+  if (p.cwd.includes(PLACEHOLDER)) uses.push('"cwd"');
+  if (p.requires.some((r) => r.includes(PLACEHOLDER))) uses.push('"requires"');
+  p.checks.forEach((c, i) => {
+    if (c.run.includes(PLACEHOLDER)) uses.push(`checks[${i}].run`);
+    if (c.cwd.includes(PLACEHOLDER) && c.cwd !== p.cwd) uses.push(`checks[${i}].cwd`);
+  });
+  if (!template) {
+    if (uses.length > 0) errors.push(`${at} uses {name} in ${uses.join(', ')}, but none of its paths has {name}`);
+    return false;
+  }
+  if (!p.name.includes(PLACEHOLDER)) errors.push(`${at}.name must contain {name}, so each module gets its own part name (like "backend:{name}")`);
+  p.paths.forEach((path, i) => {
+    if (!path.includes(PLACEHOLDER)) errors.push(`${at}.paths[${i}] has no {name}; in a template part every path needs {name}`);
+  });
+  return true;
+}
+
 function checks(v: unknown, at: string, errors: string[], cwd: string): Check[] {
   if (v === undefined) return [];
   if (!Array.isArray(v)) {
@@ -141,9 +184,11 @@ function validate(raw: unknown, errors: string[]): Config | null {
       const cwd = str(p['cwd'], `${at}.cwd`, errors, '.');
       const paths = strings(p['paths'], `${at}.paths`, errors, []);
       if (paths.length === 0) errors.push(`${at}.paths must list at least one glob`);
+      const requires = strings(p['requires'], `${at}.requires`, errors, []);
       const list = checks(p['checks'], `${at}.checks`, errors, cwd);
       if (list.length === 0) errors.push(`${at}.checks must list at least one check`);
-      parts.push({ name: str(p['name'], `${at}.name`, errors), paths, cwd, checks: list });
+      const part = { name: str(p['name'], `${at}.name`, errors), paths, requires, cwd, checks: list };
+      parts.push({ ...part, template: placeholderRules(part, at, errors) });
     });
   const tests = isObj(raw['tests']) ? raw['tests'] : {};
   if (raw['tests'] !== undefined && !isObj(raw['tests'])) errors.push('"tests" must be an object');
@@ -152,6 +197,12 @@ function validate(raw: unknown, errors: string[]): Config | null {
   if (mode !== 'off' && mode !== 'observe' && mode !== 'enforce') errors.push('"gate.mode" must be "off", "observe" or "enforce"');
   const review = isObj(raw['review']) ? raw['review'] : {};
   const maxRounds = raw['maxRounds'] ?? 3;
+  const maxExpanded = raw['maxExpandedParts'] ?? 12;
+  if (typeof maxExpanded !== 'number' || !Number.isInteger(maxExpanded) || maxExpanded < 1) errors.push('"maxExpandedParts" must be a whole number of 1 or more');
+  if (raw['prChecks'] !== undefined && !warnedPrChecks) {
+    warnedPrChecks = true;
+    process.stderr.write('VerdictLite: "prChecks" in vlite.json is no longer used and is ignored; you can remove it.\n');
+  }
   if (typeof maxRounds !== 'number' || !Number.isInteger(maxRounds) || maxRounds < 1) errors.push('"maxRounds" must be a whole number of 1 or more');
   return {
     version: 1,
@@ -159,7 +210,7 @@ function validate(raw: unknown, errors: string[]): Config | null {
     docs: strings(raw['docs'], '"docs"', errors, []),
     codeDespiteDocs: strings(raw['codeDespiteDocs'], '"codeDespiteDocs"', errors, []),
     parts,
-    prChecks: checks(raw['prChecks'], '"prChecks"', errors, '.'),
+    maxExpandedParts: typeof maxExpanded === 'number' ? maxExpanded : 12,
     tests: {
       paths: strings(tests['paths'], '"tests.paths"', errors, []),
       removalsLog: str(tests['removalsLog'], '"tests.removalsLog"', errors, 'TEST-REMOVALS.md'),

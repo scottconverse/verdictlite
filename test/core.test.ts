@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadConfig, parseConfig } from '../src/config.js';
 import { git, worktreeTree } from '../src/git.js';
 import { baseConfig, makeRepo } from './helpers.js';
@@ -61,7 +61,55 @@ describe('config', () => {
     const c = parseConfig(`﻿${JSON.stringify({ version: 1 })}`, 'x');
     expect(c.gate.mode).toBe('observe');
     expect(c.maxRounds).toBe(3);
+    expect(c.maxExpandedParts).toBe(12);
     expect(c.review.command).toBe('claude');
+  });
+
+  it('gives clear errors for bad {name} use, requires and maxExpandedParts', () => {
+    const check = (run: string): object => ({ name: 'c', run });
+    const bad = {
+      version: 1,
+      maxExpandedParts: 0,
+      parts: [
+        { name: 'plain', paths: ['src/**'], requires: ['x/{name}'], checks: [check('pytest tests/{name}')] },
+        { name: 'other:{name}', paths: ['src/{module}/**'], checks: [check('x')] },
+        { name: 'half:{name}', paths: ['src/lib_{name}/**'], checks: [check('x')] },
+        { name: 'noname', paths: ['src/{name}/**'], checks: [check('x')] },
+        { name: 'mixed:{name}', paths: ['src/{name}/**', 'shared/**'], checks: [check('x')] },
+        { name: 'req', paths: ['src/**'], requires: 'tests', checks: [check('x')] },
+      ],
+    };
+    let message = '';
+    try {
+      parseConfig(JSON.stringify(bad), 'vlite.json');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain('parts[0] uses {name} in "requires", checks[0].run, but none of its paths has {name}');
+    expect(message).toContain('parts[1].paths[0] uses "{module}"; the only placeholder is {name}');
+    expect(message).toContain('parts[2].paths[0]: {name} must be a whole path segment');
+    expect(message).toContain('parts[3].name must contain {name}');
+    expect(message).toContain('parts[4].paths[1] has no {name}');
+    expect(message).toContain('parts[5].requires must be a list of strings');
+    expect(message).toContain('"maxExpandedParts" must be a whole number of 1 or more');
+    expect(message).not.toContain('parts[1].name');
+  });
+
+  it('ignores an old "prChecks" with one warning, not an error', () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      lines.push(String(chunk));
+      return true;
+    });
+    try {
+      const text = JSON.stringify({ version: 1, prChecks: [{ name: 'x', run: 'y' }] });
+      const c = parseConfig(text, 'x');
+      parseConfig(text, 'x');
+      expect('prChecks' in c).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toEqual(['VerdictLite: "prChecks" in vlite.json is no longer used and is ignored; you can remove it.\n']);
   });
 });
 

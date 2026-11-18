@@ -150,3 +150,97 @@ describe('stop-check', () => {
     expect(stopLog(r).at(-1)?.['session']).toBe('manual');
   });
 });
+
+describe('stop-check with a template part', () => {
+  // record.mjs logs the module name it was given to ran-log.txt (git-ignored), and fails when pkg/<name>/FAIL exists.
+  const RECORD = `import { appendFileSync, existsSync } from 'node:fs';
+const name = process.argv[2];
+appendFileSync('ran-log.txt', name + '\\n');
+if (existsSync('pkg/' + name + '/FAIL')) { console.log('tests for ' + name + ' failed'); process.exit(2); }
+`;
+  function templated(extra: object = {}): Repo {
+    return makeRepo(
+      {
+        '.gitignore': 'ran-log.txt\n',
+        'record.mjs': RECORD,
+        'pkg/alpha/x.py': 'a = 1\n',
+        'pkg/beta/y.py': 'b = 1\n',
+        'pkg/gamma/z.py': 'c = 1\n',
+        'tests/alpha/t.txt': 'alpha tests\n',
+        'tests/beta/t.txt': 'beta tests\n',
+      },
+      {
+        version: 1,
+        base: 'main',
+        docs: ['**/*.md'],
+        parts: [
+          {
+            name: 'mod:{name}',
+            paths: ['pkg/{name}/**', 'tests/{name}/**'],
+            requires: ['tests/{name}'],
+            checks: [{ name: 'tests', run: 'node record.mjs {name}', timeoutSec: 60 }],
+          },
+        ],
+        ...extra,
+      },
+    );
+  }
+  const ranLog = (r: Repo): string[] => {
+    const file = join(r.dir, 'ran-log.txt');
+    return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
+  };
+
+  it('runs only the tests of the module that changed, then both when two modules change', () => {
+    const r = templated();
+    r.write('pkg/alpha/x.py', 'a = 2\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', ran: ['mod:alpha/tests'] });
+    expect(ranLog(r)).toEqual(['alpha']);
+
+    r.write('pkg/alpha/x.py', 'a = 3\n');
+    r.write('pkg/beta/y.py', 'b = 3\n');
+    r.write('tests/beta/t.txt', 'more beta tests\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', ran: ['mod:alpha/tests', 'mod:beta/tests'] });
+    expect(ranLog(r)).toEqual(['alpha', 'alpha', 'beta']);
+  });
+
+  it('names the expanded part in the block message', () => {
+    const r = templated();
+    r.write('pkg/beta/FAIL', 'x\n');
+    r.write('pkg/alpha/x.py', 'a = 2\n');
+    const reason = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason']);
+    expect(reason).toContain('[mod:beta/tests] failed');
+    expect(reason).toContain('command: node record.mjs beta');
+    expect(reason).toContain('tests for beta failed');
+    expect(reason).not.toContain('mod:alpha/tests] failed');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'block', failing: ['mod:beta/tests'], ran: ['mod:alpha/tests', 'mod:beta/tests'] });
+  });
+
+  it('skips a module whose required folder is missing and says so in the log', () => {
+    const r = templated();
+    r.write('pkg/gamma/z.py', 'c = 2\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', ran: [], skipped: { 'mod:gamma': 'requires missing: tests/gamma' } });
+    expect(ranLog(r)).toEqual([]);
+  });
+
+  it('runs nothing for a folder name that is not a safe name', () => {
+    const r = templated();
+    const names = ['a;rm -rf x', 'two words', '$HOME', '`id`', 'a&b', "it's", ...(process.platform === 'win32' ? [] : ['a|b', '"q"'])];
+    for (const n of names) r.write(`pkg/${n}/y.py`, 'x\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', ran: [], changed: names.length });
+    expect(ranLog(r)).toEqual([]);
+  });
+
+  it('fails a "too many parts" check instead of running past the cap', () => {
+    const r = templated({ maxExpandedParts: 2 });
+    for (const m of ['alpha', 'beta', 'gamma']) r.write(`pkg/${m}/new.py`, 'x\n');
+    const reason = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason']);
+    expect(reason).toContain('[mod:{name} (too many parts)] failed');
+    expect(reason).toContain('None of these parts ran: mod:alpha, mod:beta, mod:gamma');
+    expect(reason).toContain('Run the wider check by hand');
+    expect(ranLog(r)).toEqual([]);
+  });
+});
