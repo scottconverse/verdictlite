@@ -56,7 +56,7 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
   const prompt = buildPrompt({ rules, rulesFile: config.review.rulesFile, base, diff, diffTruncated, priors: good, note: opts.roundNote });
   const command = process.env['VLITE_REVIEW_CMD'] || config.review.command;
   const line = [command, ...config.review.args.map(quoteArg)].join(' ');
-  const r = await runShell(line, root, config.review.timeoutSec, prompt);
+  const r = await runShell(line, root, config.review.timeoutSec, prompt, { ...process.env, VLITE_REVIEWER: '1' });
 
   const record: Round = {
     round: n,
@@ -110,6 +110,7 @@ function buildPrompt(p: { rules: string | null; rulesFile: string; base: string 
     'You are the code reviewer for this change. Review only the diff below against the rules below.',
     'Run only the rules whose trigger matches something in the diff. Every finding needs a file and a line.',
     'Severity: "important" = must fix before merge; "nit" = small, optional; "pre-existing" = problem not added by this diff.',
+    'You are read-only: do not edit, create or delete any file, and do not run commands that change the repo.',
     'Do not praise. Do not summarise. If nothing is wrong, return an empty findings list.',
     'Reply with STRICT JSON only, no prose, in exactly this shape:',
     '{"findings":[{"severity":"important|nit|pre-existing","file":"","line":0,"rule":"","problem":"","evidence":""}],"rulesChecked":["..."]}',

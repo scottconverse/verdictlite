@@ -22,6 +22,17 @@ function stopLog(r: Repo): Record<string, unknown>[] {
 const hook = (r: Repo, session = 's1'): string => JSON.stringify({ session_id: session, cwd: r.dir, stop_hook_active: false });
 
 describe('stop-check', () => {
+  it('does nothing in a reviewer session (VLITE_REVIEWER=1), but blocks the same repo without it', () => {
+    const r = setup();
+    r.write('src/app.js', 'BAD\n');
+    const skipped = r.vlite(['stop-check'], { input: hook(r), env: { VLITE_REVIEWER: '1' } });
+    expect(skipped.code).toBe(0);
+    expect(skipped.out).toBe('');
+    const blocked = r.vlite(['stop-check'], { input: hook(r), env: { VLITE_REVIEWER: '' } });
+    expect(blocked.code).toBe(0);
+    expect(lastJson(blocked.out)['decision']).toBe('block');
+  });
+
   it('passes a good change, records the tree, and is silent on the same tree', () => {
     const r = setup();
     r.write('src/app.js', 'still fine\n');

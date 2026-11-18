@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.0. Early stage. See [Status](#status).
+- Version: 0.1.1. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -297,6 +297,7 @@ Runs one AI review round on the diff from the merge-base to the working tree.
 - Earlier rounds on this branch go into the prompt.
 - The prompt goes on stdin to `review.command` with `review.args`. The default
   is `claude -p`. The env var `VLITE_REVIEW_CMD` replaces the command.
+- The reviewer runs with `VLITE_REVIEWER=1`. The stop check does nothing in that session. A review never runs your repo's checks and is never blocked by them.
 - The reviewer must reply in strict JSON findings, each `important`, `nit` or
   `pre-existing`.
 
@@ -442,7 +443,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.0.
+  another name, such as `master`, is not searched in 0.1.1.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -450,14 +451,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.0 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.1 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.0 is the first release, built on 2026-11-18. It is being set
+Early. Version 0.1.1 is a fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 111 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 113 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

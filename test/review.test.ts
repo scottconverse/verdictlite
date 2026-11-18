@@ -9,10 +9,11 @@ import { baseConfig, makeRepo, type Repo } from './helpers.js';
 const FAKE = `import { readFileSync, writeFileSync } from 'node:fs';
 const prompt = readFileSync(0, 'utf8');
 writeFileSync(process.env.FAKE_PROMPT_OUT, prompt);
+writeFileSync(process.env.FAKE_PROMPT_OUT + '.env', String(process.env.VLITE_REVIEWER));
 process.stdout.write(readFileSync(process.env.FAKE_REPLY, 'utf8'));
 `;
 
-function setup(): { r: Repo; run(reply: string, args?: string[]): { code: number; out: string; err: string; prompt: string } } {
+function setup(): { r: Repo; run(reply: string, args?: string[]): { code: number; out: string; err: string; prompt: string; reviewerEnv: string } } {
   const r = makeRepo({ 'src/app.js': 'a\n', 'REVIEW.md': '## R1 no console.log\nTrigger: any .js file.\n' }, baseConfig({ review: { command: 'claude', args: ['-p'], rulesFile: 'REVIEW.md', timeoutSec: 60 } }));
   const tools = tempDir('fake-');
   writeFileSync(join(tools, 'fake.mjs'), FAKE);
@@ -28,7 +29,8 @@ function setup(): { r: Repo; run(reply: string, args?: string[]): { code: number
           FAKE_PROMPT_OUT: promptOut,
         },
       });
-      return { ...out, prompt: existsSync(promptOut) ? readFileSync(promptOut, 'utf8') : '' };
+      const envOut = `${promptOut}.env`;
+      return { ...out, prompt: existsSync(promptOut) ? readFileSync(promptOut, 'utf8') : '', reviewerEnv: existsSync(envOut) ? readFileSync(envOut, 'utf8') : '' };
     },
   };
 }
@@ -46,6 +48,15 @@ const IMPORTANT = JSON.stringify({
 });
 
 describe('review', () => {
+  it('runs the reviewer with VLITE_REVIEWER=1 and tells it not to change files', () => {
+    const { r, run } = setup();
+    r.write('src/app.js', 'b\n');
+    const out = run('{"findings":[],"rulesChecked":[]}');
+    expect(out.code, out.err).toBe(0);
+    expect(out.prompt).toContain('do not edit, create or delete any file');
+    expect(out.reviewerEnv).toBe('1');
+  });
+
   it('clean review writes a code-review stamp for the current tree; rules come from the base, not the working tree', () => {
     const { r, run } = setup();
     r.write('src/app.js', 'b\n');

@@ -10,11 +10,12 @@ export interface RunResult {
 const MAX_OUTPUT = 2 * 1024 * 1024;
 
 /** Runs a command line through the shell, with a timeout that kills the whole process tree. */
-export function runShell(command: string, cwd: string, timeoutSec: number, input?: string): Promise<RunResult> {
+export function runShell(command: string, cwd: string, timeoutSec: number, input?: string, env?: NodeJS.ProcessEnv): Promise<RunResult> {
   const started = Date.now();
   return new Promise((resolvePromise) => {
     const child = spawn(command, {
       cwd,
+      ...(env ? { env } : {}),
       shell: true,
       windowsHide: true,
       detached: process.platform !== 'win32', // own process group, so a timeout can kill grandchildren
