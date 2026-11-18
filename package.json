@@ -1,0 +1,26 @@
+{
+  "name": "verdictlite",
+  "version": "0.1.0",
+  "description": "VerdictLite (vlite): verification gates for AI coding agents in a git repo",
+  "type": "module",
+  "bin": {
+    "vlite": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm build && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  },
+  "packageManager": "pnpm@10.34.9"
+}
