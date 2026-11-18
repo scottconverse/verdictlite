@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VerdictLite: make the coding agent run the checks</title>
+  <meta name="description" content="VerdictLite (vlite) is a small CLI for git repos. It runs your checks when a Claude Code agent tries to stop, flags skipped or deleted tests, and records how each commit was verified. Version 0.1.0, Apache-2.0.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="VerdictLite 0.1.0: make the coding agent run the checks">
+  <meta property="og:description" content="A small CLI for git repos. Runs your checks when the agent tries to stop, flags skipped or deleted tests, and marks each commit with how it was verified.">
+  <meta property="og:url" content="https://scottconverse.github.io/verdictlite/">
+  <meta name="twitter:card" content="summary">
+  <link rel="canonical" href="https://scottconverse.github.io/verdictlite/">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="VerdictLite home">
+      <img src="assets/favicon.svg" alt="" width="26" height="26">
+      <span>VerdictLite</span>
+      <span class="ver">v0.1.0</span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <ul>
+        <li><a href="#why">Why</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#output">Output</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#limits">Limits</a></li>
+        <li><a href="manual.html">Manual</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite">GitHub</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">v0.1.0 &middot; first release &middot; Apache-2.0</p>
+      <h1 id="hero-title">Make the coding agent run the checks before it stops.</h1>
+      <p class="lede">VerdictLite is a small command-line tool for git repos. When a Claude Code agent tries to stop, it runs your checks. It flags tests that were skipped or deleted. At commit time it writes down how the change was verified.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#install">Install from source</a>
+        <a class="btn btn-secondary" href="manual.html">Read the manual</a>
+        <a class="btn btn-secondary" href="https://github.com/scottconverse/verdictlite">View on GitHub</a>
+      </div>
+      <p class="hero-meta">Early stage: built on 2026-11-18 and being set up on its first real repo now. Not on npm. Not made by or affiliated with Anthropic.</p>
+    </div>
+    <figure class="term" aria-labelledby="hero-term-cap">
+      <div class="term-bar"><span>Claude Code Stop hook</span><span class="label">vlite stop-check</span></div>
+      <pre tabindex="0"><span class="err">VerdictLite: checks failed on this change.</span>
+
+[app/tests] failed
+command: node --test
+exit code 1
+last lines of output:
+not ok 1 - adds price times quantity
+  error: |-
+    Expected values to be strictly equal:
+
+    <span class="err">11 !== 14</span>
+<span class="cut">  ... (test output trimmed)</span>
+
+Full output: ~/.verdictlite/shop-ea1973230c/handoffs/
+  2026-11-18T18-13-44-751Z-round1.txt
+
+<span class="warn">Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</span></pre>
+      <figcaption id="hero-term-cap" class="term-caption" style="padding:0 1rem 0.9rem;margin:0;color:var(--term-dim)">Real output from a demo repo. The agent changed <code style="background:none;border:0;color:inherit">*</code> to <code style="background:none;border:0;color:inherit">+</code> in a price function. The stop was blocked and the agent was told why.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<div class="facts" role="region" aria-label="Project facts">
+  <div class="wrap">
+    <ul>
+      <li><strong>Version 0.1.0</strong>First release</li>
+      <li><strong>Node.js 20+</strong>TypeScript CLI, ESM</li>
+      <li><strong>Zero runtime dependencies</strong>Only dev tools to build</li>
+      <li><strong>94 automated tests</strong>CI on Ubuntu and Windows</li>
+      <li><strong>Apache-2.0</strong>Public repo</li>
+      <li><strong>Not on npm</strong>Install from the git repo</li>
+    </ul>
+  </div>
+</div>
+
+<section id="why" aria-labelledby="why-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The problem</p>
+      <h2 id="why-title">Agents say "done" too early.</h2>
+      <p>An AI coding agent can stop or commit without running the tests. When a test fails, it can be tempted to skip it, add a sleep, add retries or delete it. VerdictLite puts a simple check at each of those points.</p>
+    </div>
+    <div class="ledger">
+      <div class="ledger-row">
+        <h3><span class="k">What goes wrong</span>The agent stops without running the checks.</h3>
+        <p><span class="k">What VerdictLite does</span>A Claude Code <a href="https://code.claude.com/docs/en/hooks">Stop hook</a> runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error.</p>
+      </div>
+      <div class="ledger-row">
+        <h3><span class="k">What goes wrong</span>A failing test gets skipped, slowed, retried or deleted.</h3>
+        <p><span class="k">What VerdictLite does</span>A built-in test-tamper check looks at the changed lines in test files. It flags added skips, fixed sleeps, retries and removed tests.</p>
+      </div>
+      <div class="ledger-row">
+        <h3><span class="k">What goes wrong</span>The agent tries the same broken fix forever.</h3>
+        <p><span class="k">What VerdictLite does</span>Rounds are counted. After three failed rounds the session ends and a person is asked to look, with a hand-off file of the full output.</p>
+      </div>
+      <div class="ledger-row">
+        <h3><span class="k">What goes wrong</span>A commit gives no sign of how it was checked.</h3>
+        <p><span class="k">What VerdictLite does</span>Git hooks add a <code>Verified-By:</code> line to every commit message: <code>verify</code>, <code>code-review</code>, <code>docs</code>, <code>skipped</code> or <code>none</code>.</p>
+      </div>
+      <div class="ledger-row">
+        <h3><span class="k">What goes wrong</span>A change loosens the rules that judge it.</h3>
+        <p><span class="k">What VerdictLite does</span>The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="section-alt" aria-labelledby="how-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-title">Two gates: one when the agent stops, one when it commits.</h2>
+      <p>The stop gate needs Claude Code. The commit gate is plain git hooks, so it works with any agent and with people.</p>
+    </div>
+    <figure class="diagram">
+      <svg class="wide" viewBox="0 0 972 380" role="img" aria-labelledby="dgw-t dgw-d">
+        <title id="dgw-t">VerdictLite flow</title>
+        <desc id="dgw-d">The agent changes code and tries to stop. The Stop hook runs vlite stop-check. It can pass, block with round N of 3, or hand off to a person after 3 rounds. A blocked agent fixes the cause and tries again. After a pass, the agent stamps and commits. The commit gate git hooks check for a stamp on the exact tree and add a Verified-By trailer. Both the stop check and the gate read their rules from the base branch.</desc>
+        <defs>
+          <marker id="ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-arrow" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+        <text class="dg-h" x="20" y="18">STOP GATE (CLAUDE CODE)</text>
+        <text class="dg-h" x="750" y="18">COMMIT GATE (GIT HOOKS)</text>
+
+        <rect class="dg-box" x="20" y="95" width="160" height="70" rx="8"/>
+        <text class="dg-tb" x="100" y="125" text-anchor="middle">Agent changes</text>
+        <text class="dg-tb" x="100" y="145" text-anchor="middle">code, tries to stop</text>
+
+        <rect class="dg-box" x="230" y="95" width="200" height="70" rx="8"/>
+        <text class="dg-tb" x="330" y="122" text-anchor="middle">Stop hook</text>
+        <text class="dg-m" x="330" y="144" text-anchor="middle">vlite stop-check</text>
+
+        <path class="dg-line" d="M180 130H226" marker-end="url(#ahw)"/>
+
+        <rect class="dg-pass" x="490" y="30" width="224" height="62" rx="8"/>
+        <text class="dg-pass-t" x="506" y="54">PASS</text>
+        <text class="dg-t" x="506" y="76">The agent may stop.</text>
+
+        <rect class="dg-handoff" x="490" y="112" width="224" height="62" rx="8"/>
+        <text class="dg-handoff-t" x="506" y="136">HAND-OFF</text>
+        <text class="dg-t" x="506" y="158">After 3 rounds: a person looks.</text>
+
+        <rect class="dg-block" x="490" y="194" width="224" height="62" rx="8"/>
+        <text class="dg-block-t" x="506" y="218">BLOCK</text>
+        <text class="dg-t" x="506" y="240">Round N of 3. Fix the cause.</text>
+
+        <path class="dg-line" d="M430 120C460 120 455 61 486 61" marker-end="url(#ahw)"/>
+        <path class="dg-line" d="M430 135C460 135 460 143 486 143" marker-end="url(#ahw)"/>
+        <path class="dg-line" d="M430 150C460 150 455 225 486 225" marker-end="url(#ahw)"/>
+
+        <path class="dg-line" d="M602 256V282H100V169" marker-end="url(#ahw)"/>
+        <text class="dg-s" x="342" y="302">The agent gets the error, fixes the cause and tries to stop again.</text>
+
+        <rect class="dg-box" x="750" y="30" width="190" height="104" rx="8"/>
+        <text class="dg-tb" x="764" y="56">Stamp, then commit</text>
+        <text class="dg-m" x="764" y="78">pre-commit</text>
+        <text class="dg-m" x="764" y="96">commit-msg</text>
+        <text class="dg-s" x="764" y="120">Looks for a stamp on this tree.</text>
+
+        <path class="dg-line" d="M714 61H746" marker-end="url(#ahw)"/>
+
+        <rect class="dg-pass" x="750" y="164" width="190" height="56" rx="8"/>
+        <text class="dg-m" x="764" y="188">Verified-By: verify</text>
+        <text class="dg-s" x="764" y="208">A line added to the message.</text>
+        <path class="dg-line" d="M845 134V160" marker-end="url(#ahw)"/>
+
+        <rect class="dg-base" x="20" y="322" width="944" height="46" rx="8"/>
+        <text class="dg-tb" x="40" y="350">Base branch</text>
+        <text class="dg-s" x="140" y="350">vlite.json and REVIEW.md are read from here, not from the change being judged.</text>
+        <path class="dg-read" d="M330 322V169" marker-end="url(#ahw)"/>
+        <path class="dg-read" d="M952 322V82H944" marker-end="url(#ahw)"/>
+      </svg>
+
+      <svg class="narrow" viewBox="0 0 400 700" role="img" aria-labelledby="dgn-t dgn-d">
+        <title id="dgn-t">VerdictLite flow</title>
+        <desc id="dgn-d">The agent changes code and tries to stop. The Stop hook runs vlite stop-check. It can block with round N of 3, hand off to a person after 3 rounds, or pass. A blocked agent fixes the cause and tries again. After a pass, the agent stamps and commits. The commit gate adds a Verified-By trailer. Rules come from the base branch.</desc>
+        <defs>
+          <marker id="ahn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-arrow" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+        <rect class="dg-box" x="60" y="20" width="280" height="52" rx="8"/>
+        <text class="dg-tb" x="200" y="51" text-anchor="middle">Agent changes code, tries to stop</text>
+        <path class="dg-line" d="M200 72V96" marker-end="url(#ahn)"/>
+
+        <rect class="dg-box" x="60" y="100" width="280" height="60" rx="8"/>
+        <text class="dg-tb" x="200" y="125" text-anchor="middle">Stop hook</text>
+        <text class="dg-m" x="200" y="146" text-anchor="middle">vlite stop-check</text>
+
+        <rect class="dg-block" x="20" y="200" width="170" height="64" rx="8"/>
+        <text class="dg-block-t" x="34" y="224">BLOCK</text>
+        <text class="dg-s" x="34" y="246">Round N of 3. Fix it.</text>
+        <rect class="dg-handoff" x="210" y="200" width="170" height="64" rx="8"/>
+        <text class="dg-handoff-t" x="224" y="224">HAND-OFF</text>
+        <text class="dg-s" x="224" y="246">After 3: a person looks.</text>
+        <path class="dg-line" d="M120 160V196" marker-end="url(#ahn)"/>
+        <path class="dg-line" d="M280 160V196" marker-end="url(#ahn)"/>
+        <path class="dg-line" d="M20 232H8V46H56" marker-end="url(#ahn)"/>
+
+        <path class="dg-line" d="M200 160V300" marker-end="url(#ahn)"/>
+        <rect class="dg-pass" x="60" y="304" width="280" height="52" rx="8"/>
+        <text class="dg-pass-t" x="76" y="327">PASS</text>
+        <text class="dg-t" x="76" y="346">The agent may stop.</text>
+
+        <path class="dg-line" d="M200 356V392" marker-end="url(#ahn)"/>
+        <rect class="dg-box" x="60" y="396" width="280" height="76" rx="8"/>
+        <text class="dg-tb" x="76" y="421">Stamp, then commit</text>
+        <text class="dg-m" x="76" y="442">pre-commit, commit-msg</text>
+        <text class="dg-s" x="76" y="461">Looks for a stamp on this tree.</text>
+
+        <path class="dg-line" d="M200 472V500" marker-end="url(#ahn)"/>
+        <rect class="dg-pass" x="60" y="504" width="280" height="44" rx="8"/>
+        <text class="dg-m" x="76" y="531">Verified-By: verify</text>
+
+        <rect class="dg-base" x="20" y="600" width="360" height="80" rx="8"/>
+        <text class="dg-tb" x="36" y="628">Base branch</text>
+        <text class="dg-s" x="36" y="650">vlite.json and REVIEW.md are read</text>
+        <text class="dg-s" x="36" y="668">from here, not from the change.</text>
+        <path class="dg-read" d="M380 640H392V130H344" marker-end="url(#ahn)"/>
+        <path class="dg-read" d="M392 434H344" marker-end="url(#ahn)"/>
+      </svg>
+      <figcaption>A stop-check pass lets the agent stop. It is not a stamp. Stamps come from <code>vlite stamp verify</code> (usually run by a verify skill) or from a clean <code>vlite review</code>. A stamp shows that a step ran on that exact set of files. It is a speed bump, not proof.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section aria-labelledby="caps-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">What it does</p>
+      <h2 id="caps-title">Five commands. One config file.</h2>
+    </div>
+    <div class="caps">
+      <div class="cap">
+        <h3>Stop check</h3>
+        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch.</p>
+      </div>
+      <div class="cap">
+        <h3>Three-round hand-off</h3>
+        <p>Failed stops are counted per session. Rounds 1 and 2 block. Round 3 ends the session and points a person to a file with up to 2,000 lines of output.</p>
+      </div>
+      <div class="cap">
+        <h3>Test-tamper check</h3>
+        <p>Flags added skips, fixed sleeps, retries and removed tests in your test files. A test you remove on purpose is written down in <code>TEST-REMOVALS.md</code>.</p>
+      </div>
+      <div class="cap">
+        <h3>Stamps</h3>
+        <p><code>vlite stamp verify</code> records that a check ran on the exact tree, with evidence files that must exist. The commit gate looks for it.</p>
+      </div>
+      <div class="cap">
+        <h3>Commit gate</h3>
+        <p><code>vlite install</code> adds <code>pre-commit</code> and <code>commit-msg</code> hooks. They add a <code>Verified-By:</code> trailer. Modes are <code>off</code>, <code>observe</code> and <code>enforce</code>.</p>
+      </div>
+      <div class="cap">
+        <h3>AI review</h3>
+        <p><code>vlite review</code> sends the diff and your <code>REVIEW.md</code> rules from the base branch to a review command (by default <code>claude -p</code>). A clean result writes a stamp.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="output" class="section-alt" aria-labelledby="out-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Real output</p>
+      <h2 id="out-title">What the agent and you will see.</h2>
+      <p>Every block below is real output from <code>vlite</code> 0.1.0, run in a small demo repo. Home folder paths are shortened to <code>~/.verdictlite/...</code>. Long test output is trimmed where marked.</p>
+    </div>
+    <div class="proof">
+      <figure>
+        <div class="term">
+          <div class="term-bar"><span>The agent skipped one test and deleted another</span></div>
+          <pre tabindex="0" class="wrap-lines"><span class="err">[test-tamper] failed</span>
+command: (built-in)
+exit code 1
+last lines of output:
+tests/price.test.js:5 [skip] test.skip('adds price times quantity', () =&gt; {
+  -&gt; Remove the skip or xfail. Fix the test or the code instead.
+tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () =&gt; {
+  -&gt; Test "rounds to cents" was removed. Restore it, or add a line to TEST-REMOVALS.md with its name and why it was removed.</pre>
+        </div>
+        <figcaption class="term-caption">The test suite passed in this round, because the failing test was skipped. The tamper check is what caught it.</figcaption>
+      </figure>
+      <figure>
+        <div class="term">
+          <div class="term-bar"><span>Round 3: the session ends</span></div>
+          <pre tabindex="0" class="wrap-lines"><span class="err">VerdictLite: app/tests still fails after 3 rounds. A person must look.</span> Last failure: exit code 1. Handoff: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-49-327Z-round3.txt</pre>
+        </div>
+        <figcaption class="term-caption">Claude Code gets <code>{"continue": false}</code> and stops the agent. You read the hand-off file and decide what to do.</figcaption>
+      </figure>
+      <figure>
+        <div class="term">
+          <div class="term-bar"><span>Stamp, commit, look at the log</span></div>
+          <pre tabindex="0"><span class="p">$</span> vlite stamp verify --result pass --evidence ../test-run.log --note "node --test, 2 pass"
+<span class="ok">Stamped verify pass for tree b37dc8b45064</span>
+
+<span class="p">$</span> git log -1
+commit 709b7cf14af4
+Author: Demo &lt;demo@example.com&gt;
+
+    feat: add count()
+
+    <span class="ok">Verified-By: verify</span></pre>
+        </div>
+        <figcaption class="term-caption">Commit id shortened and date line removed. The gate added the last line.</figcaption>
+      </figure>
+      <figure>
+        <div class="term">
+          <div class="term-bar"><span>A week of commits in observe mode</span></div>
+          <pre tabindex="0"><span class="p">$</span> vlite gate report --days 7
+VerdictLite gate report, last 7 days (mode now: observe)
+Commits judged: 4
+  verify: 1
+  docs: 1
+  none: 1
+  skipped: 1
+<span class="warn">Would have been blocked (observe): 1</span>
+Blocked (enforce): 0
+Let through after two blocks (escape): 0
+Overrides (Verify-Skip): 1
+  2026-11-18 18:13  generated file, checked by hand</pre>
+        </div>
+        <figcaption class="term-caption">Use this report to decide when to switch the gate from <code>observe</code> to <code>enforce</code>.</figcaption>
+      </figure>
+      <figure class="span-2">
+        <div class="term">
+          <div class="term-bar"><span>Enforce mode: a commit with no stamp</span><span class="label">exit 1</span></div>
+          <pre tabindex="0" class="wrap-lines"><span class="p">$</span> git commit -m "feat: version 3"
+<span class="err">VerdictLite: commit blocked. Nothing shows this exact change was verified (method: none).</span>
+Do one of these, then commit again:
+  1. Run the checks, then:  vlite stamp verify --result pass --evidence &lt;log file&gt;
+  2. Get the AI review:     vlite review
+  3. Skip on purpose: add this line at the end of the commit message:
+       Verify-Skip: &lt;why this commit does not need it&gt;
+A stamp only counts for the exact staged tree. Stage everything first (git add -A).</pre>
+        </div>
+        <figcaption class="term-caption">After two blocks within 30 minutes, the third try goes through and is logged as an escape. Nobody gets locked out of their own repo.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="modes-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Commit gate modes</p>
+      <h2 id="modes-title">Watch first. Enforce when the numbers say so.</h2>
+      <p>Set <code>gate.mode</code> in <code>vlite.json</code> on the base branch.</p>
+    </div>
+    <ul class="modes">
+      <li class="mode"><h3>off</h3><p>Nothing. No trailer, no log.</p></li>
+      <li class="mode is-default"><span class="tag">default</span><h3>observe</h3><p>Never blocks. Adds the trailer. Logs the commits that would have been blocked.</p></li>
+      <li class="mode"><h3>enforce</h3><p>Blocks a commit with method <code>none</code>. A <code>Verify-Skip:</code> line skips on purpose, with a reason.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section id="install" class="section-alt" aria-labelledby="install-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Quick start</p>
+      <h2 id="install-title">Install from source, then set up one repo.</h2>
+      <p>You need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm. Keep the clone outside the repos it checks.</p>
+    </div>
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Install the tool</h3>
+<pre class="code" tabindex="0"><code>git clone https://github.com/scottconverse/verdictlite.git
+cd verdictlite
+pnpm install
+pnpm build
+npm link</code></pre>
+          <p><code>npm link</code> puts <code>vlite</code> on your PATH. Run <code>vlite --help</code> to check.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Write <code>vlite.json</code> and merge it to the base branch</h3>
+<pre class="code" tabindex="0"><code>{
+  "version": 1,
+  "base": "origin/main",
+  "docs": ["**/*.md", "docs/**"],
+  "parts": [
+    { "name": "app", "paths": ["src/**", "test/**"],
+      "checks": [ { "name": "tests", "run": "pnpm test" } ] }
+  ],
+  "tests": { "paths": ["test/**"] },
+  "gate": { "mode": "observe" }
+}</code></pre>
+          <p>The config is read from the base branch. Until it is merged there, VerdictLite uses your working copy and prints a warning each time.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Install the git hooks</h3>
+<pre class="code" tabindex="0"><code><span class="p">$ </span>vlite install --claude</code></pre>
+          <p>This adds the <code>pre-commit</code> and <code>commit-msg</code> hooks and prints the Stop hook settings. It keeps any hook you already have and runs it first.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Add the Stop hook to <code>.claude/settings.json</code></h3>
+<pre class="code" tabindex="0"><code>{
+  "hooks": {
+    "Stop": [
+      { "hooks": [
+        { "type": "command", "command": "vlite stop-check", "timeout": 3600 }
+      ] }
+    ]
+  }
+}</code></pre>
+          <p>The timeout is in seconds. Make it longer than all your checks put together. Then add a verify skill so the agent stamps its work. The <a href="manual.html#3-set-up-a-repo">manual</a> has a full example.</p>
+        </div>
+      </li>
+    </ol>
+
+    <h3 style="margin-top:var(--space-7)">The five commands</h3>
+    <table class="cmds">
+      <tbody>
+        <tr><th scope="row"><code>vlite install</code></th><td>Adds or removes (<code>--uninstall</code>) the git hooks. <code>--claude</code> prints the Stop hook settings.</td></tr>
+        <tr><th scope="row"><code>vlite stop-check</code></th><td>The Claude Code Stop hook. Runs the checks and the tamper check. Add <code>--session NAME</code> to run it by hand.</td></tr>
+        <tr><th scope="row"><code>vlite stamp</code></th><td>Records a <code>verify</code> or <code>code-review</code> result for the current tree, with evidence files.</td></tr>
+        <tr><th scope="row"><code>vlite gate</code></th><td>Run by the git hooks. <code>vlite gate report</code> shows what the gate saw.</td></tr>
+        <tr><th scope="row"><code>vlite review</code></th><td>One AI review round against <code>REVIEW.md</code> from the base branch.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="limits" aria-labelledby="limits-title">
+  <div class="wrap limits">
+    <div>
+      <p class="eyebrow">Honest limits</p>
+      <h2 id="limits-title">What it does not do.</h2>
+      <div class="status-card">
+        <h3>Status: early</h3>
+        <p>Version 0.1.0 is the first release, built on 2026-11-18. It has 94 automated tests that run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes.</p>
+        <p>Found a problem? <a href="https://github.com/scottconverse/verdictlite/issues">Open an issue</a>.</p>
+      </div>
+    </div>
+    <ul>
+      <li><strong>It does not prove your code is right.</strong> It shows that your checks ran on this exact set of files. The checks are only as good as the ones you write.</li>
+      <li><strong>A stamp is a speed bump, not proof.</strong> Anyone can write one by hand, and <code>git commit --no-verify</code> skips git hooks. VerdictLite makes these choices visible in logs and trailers. It does not make them impossible.</li>
+      <li><strong>The stop check needs Claude Code.</strong> It uses the Claude Code Stop hook. Other agents get the commit gate only. The tamper check runs inside the stop check.</li>
+      <li><strong>The tamper check is simple.</strong> It uses regular expressions. It can miss things and can flag lines that are fine.</li>
+      <li><strong>If the tool itself breaks, it lets the agent stop.</strong> A failing check always blocks. A crash in VerdictLite does not; it logs an error instead.</li>
+      <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.0.</li>
+      <li><strong><code>prChecks</code> is not run yet.</strong> The field is checked for errors, but no command runs it in 0.1.0.</li>
+      <li><strong><code>vlite review</code> sends your diff</strong> to the review command you set, by default the <code>claude</code> CLI. The other commands run only on your machine.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="final section-alt" aria-labelledby="final-title">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">Where the idea comes from</p>
+      <h2 id="final-title">Built from a published method.</h2>
+      <p>VerdictLite follows the steps in <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a> by Addy Osmani (November 16, 2026). It turns them into a stop check, a tamper check, stamps and a commit gate you can run today.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#install">Install from source</a>
+        <a class="btn btn-secondary" href="manual.html">Read the manual</a>
+        <a class="btn btn-secondary" href="https://github.com/scottconverse/verdictlite">View on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap cols">
+    <div>
+      <p><strong>VerdictLite 0.1.0</strong>. Licensed under Apache-2.0.</p>
+      <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. Claude and Claude Code are products of Anthropic.</p>
+      <p>Method credit: <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a>, Addy Osmani, November 16, 2026.</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="manual.html">User manual</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite">Source on GitHub</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite/issues">Issues</a></li>
+        <li><a href="https://code.claude.com/docs/en/hooks">Claude Code hooks docs</a></li>
+        <li><a href="https://code.claude.com/docs/en/skills">Claude Code skills docs</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
