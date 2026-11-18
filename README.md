@@ -204,7 +204,8 @@ The Claude Code Stop hook. It runs when the agent tries to stop.
 4. If a changed file is a test file or a test-runner config file, it runs the
    built-in `test-tamper` check.
 5. It runs the checks of every part whose `paths` match a changed file. The
-   first failing check stops that part. Other parts still run.
+   first failing check stops that part. Other parts still run. A template part
+   runs once for each module that changed. See [Part templates](#part-templates).
 6. All pass: it records the pass. Something fails: it blocks the stop and tells
    the agent the command, the exit code and the last 60 lines of output.
 7. On round 3 of the same failure it ends the session and asks for a person.
@@ -338,6 +339,7 @@ tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () => {
 ## Config reference: `vlite.json`
 
 Unknown keys are ignored. A bad value stops the command with a list of errors.
+An old `prChecks` field is ignored with a one-line warning.
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
@@ -347,17 +349,18 @@ Unknown keys are ignored. A bad value stops the command with a list of errors.
 | `codeDespiteDocs` | list of globs | `[]` | Files that match `docs` but count as code. |
 | `parts` | list | `[]` | Areas of the repo and their checks. |
 | `parts[].name` | string | required | Shown in messages as `name/check`. |
-| `parts[].paths` | list of globs | required, at least one | A changed file matching one of these runs the part. |
+| `parts[].paths` | list of globs | required, at least one | A changed file matching one of these runs the part. A path with `{name}` makes the part a template. |
+| `parts[].requires` | list of paths | `[]` | Paths, from the repo root, that must exist for the part to run. If one is missing, the part is skipped and `stop.jsonl` says why. |
 | `parts[].cwd` | string | `"."` | Folder, from the repo root, where checks run. |
 | `parts[].checks` | list | required, at least one | Checks, run in order. |
 | `checks[].name` | string | required | Check name. |
 | `checks[].run` | string | required | Command line. Runs through `cmd.exe` on Windows, `sh` elsewhere. |
 | `checks[].cwd` | string | the part's `cwd` | Folder for this check. |
 | `checks[].timeoutSec` | number | `600` | Seconds before the check is killed and fails. |
-| `prChecks` | list of checks | `[]` | Checked for errors, but not run by any command in 0.1.0. |
 | `tests.paths` | list of globs | `[]` | Test files for the tamper check. |
 | `tests.removalsLog` | string | `"TEST-REMOVALS.md"` | Where removed tests are written down. |
 | `maxRounds` | whole number | `3` | The failing round that hands off to a person. |
+| `maxExpandedParts` | whole number | `12` | The most parts one template may make in one stop check. |
 | `gate.mode` | `"off"`, `"observe"`, `"enforce"` | `"observe"` | Commit gate mode. |
 | `review.command` | string | `"claude"` | Reviewer command. |
 | `review.args` | list of strings | `["-p"]` | Arguments for the reviewer. |
@@ -374,6 +377,40 @@ Notes:
 - Globs match from the repo root. `**` is any number of folders, `*` is any
   text inside one name, `?` is one character.
 - A file is docs when it matches `docs` and does not match `codeDespiteDocs`.
+
+### Part templates
+
+A part with `{name}` in its `paths` is a template. VerdictLite makes one part
+for each module that changed. `{name}` stands for one folder name. This runs
+only the tests of the module that changed:
+
+```json
+{ "name": "backend:{name}",
+  "paths": ["civiccast/{name}/**", "tests/{name}/**"],
+  "requires": ["tests/{name}"],
+  "cwd": ".",
+  "checks": [ { "name": "tests", "run": "uv run --no-sync pytest tests/{name} -q -x", "timeoutSec": 600 } ] }
+```
+
+- A change to `civiccast/egress/net.py` runs `pytest tests/egress`. Messages
+  call the part `backend:egress`. A change in two modules runs both.
+- `{name}` is filled in the part's `name`, `paths`, `requires` and `cwd`, and
+  in each check's `run` and `cwd`. It must be a whole folder name. Every path
+  and the `name` of a template part need it. Any other `{...}` in `paths` is an
+  error.
+- A module with no `tests/<module>` folder is skipped. `requires` does this,
+  and `stop.jsonl` says `"requires missing: tests/foo"`.
+- **Safe names only.** The folder name goes into a shell command. It is used
+  only when it starts with a letter or digit and has only letters, digits,
+  `_`, `.` and `-`. Any other folder name does not match, and nothing runs
+  for it.
+- **Limit.** If more than `maxExpandedParts` modules (default 12) changed for
+  one template, none of them run. A check named
+  `<template name> (too many parts)` fails and lists them. Run the wider check
+  by hand.
+
+The [manual](docs/manual.md#how-to-run-the-tests-of-the-module-that-changed)
+has the full rules.
 
 ## Where state lives
 
@@ -406,7 +443,6 @@ Delete the folder to reset VerdictLite for a repo.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
   another name, such as `master`, is not searched in 0.1.0.
-- **`prChecks` is not run yet** by any command.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -421,7 +457,7 @@ Delete the folder to reset VerdictLite for a repo.
 Early. Version 0.1.0 is the first release, built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 94 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 111 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 
