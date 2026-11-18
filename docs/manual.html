@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VerdictLite 0.1.0 user manual</title>
+  <meta name="description" content="How to install VerdictLite 0.1.0, set up a repo, read block messages, use stamps, Verify-Skip, gate modes, review and the test-tamper rules. Full vlite.json reference and FAQ.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="VerdictLite 0.1.0 user manual">
+  <meta property="og:description" content="Install, repo setup, stop check, stamps, commit gate, review, test-tamper rules, config reference and FAQ.">
+  <meta property="og:url" content="https://scottconverse.github.io/verdictlite/manual.html">
+  <meta name="twitter:card" content="summary">
+  <link rel="canonical" href="https://scottconverse.github.io/verdictlite/manual.html">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="VerdictLite home">
+      <img src="assets/favicon.svg" alt="" width="26" height="26">
+      <span>VerdictLite</span>
+      <span class="ver">v0.1.0</span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <ul>
+        <li><a href="./#why">Why</a></li>
+        <li><a href="./#how">How it works</a></li>
+        <li><a href="./#install">Install</a></li>
+        <li><a href="manual.html" aria-current="page">Manual</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite">GitHub</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc" aria-label="Manual contents">
+    <details open>
+      <summary>Contents</summary>
+      <nav aria-label="Manual sections">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#1-before-you-start">Before you start</a></li>
+          <li><a href="#2-install-verdictlite">Install VerdictLite</a></li>
+          <li><a href="#3-set-up-a-repo">Set up a repo</a></li>
+          <li><a href="#4-what-happens-in-a-normal-agent-session">What happens in a normal agent session</a></li>
+          <li><a href="#5-read-a-block-message">Read a block message</a></li>
+          <li><a href="#6-the-three-round-hand-off">The three-round hand-off</a></li>
+          <li><a href="#7-stamps-and-the-verified-by-trailer">Stamps and the Verified-By trailer</a></li>
+          <li><a href="#8-skip-the-gate-on-purpose-verify-skip">Skip the gate on purpose: Verify-Skip</a></li>
+          <li><a href="#9-gate-modes-off-observe-enforce">Gate modes: off, observe, enforce</a></li>
+          <li><a href="#10-run-an-ai-review">Run an AI review</a></li>
+          <li><a href="#11-test-tamper-rules-and-test-removalsmd">Test-tamper rules and TEST-REMOVALS.md</a></li>
+          <li><a href="#12-the-gate-report">The gate report</a></li>
+          <li><a href="#13-where-state-lives">Where state lives</a></li>
+          <li><a href="#14-troubleshooting">Troubleshooting</a></li>
+          <li><a href="#15-config-reference-vlitejson">Config reference: vlite.json</a></li>
+          <li><a href="#16-command-reference">Command reference</a></li>
+          <li><a href="#17-faq">FAQ</a></li>
+        </ol>
+      </nav>
+    </details>
+  </aside>
+
+  <main id="main" class="doc">
+    <header>
+      <p class="eyebrow">Version 0.1.0 &middot; also in the repo as <code>docs/manual.md</code></p>
+      <h1>VerdictLite user manual</h1>
+      <p class="lede">VerdictLite (<code>vlite</code>) is a small command-line tool. It makes an AI coding agent run your checks before it stops, and it writes down how each commit was checked.</p>
+    </header>
+    <p>It works in any git repo. The stop check uses a Claude Code hook. The commit gate uses plain git hooks, so it works with any agent and with people too.</p>
+    <div class="note">
+      <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. It follows the method in the article <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a> by Addy Osmani (November 16, 2026).</p>
+    </div>
+
+<h2 id="1-before-you-start">1. Before you start</h2>
+<p>You need:</p>
+<ul><li><strong>git.</strong></li><li><strong>Node.js 20 or newer.</strong> Get it from <a href="https://nodejs.org/">https://nodejs.org/</a>.</li><li><strong>pnpm</strong>, to build VerdictLite from source. See <a href="https://pnpm.io/installation">https://pnpm.io/installation</a>.</li><li><strong>Claude Code</strong>, if you want the stop check. The stop check is a Claude Code <a href="https://code.claude.com/docs/en/hooks">Stop hook</a>. Other agents get the commit gate only.</li><li><strong>The <code>claude</code> command on PATH</strong>, if you want <code>vlite review</code> with the default settings.</li></ul>
+<p>VerdictLite has no runtime dependencies. It is not on npm yet. You install it from the git repo.</p>
+<p>Two words you will see a lot:</p>
+<ul><li><strong>Base branch.</strong> The branch your work will merge into, usually <code>main</code>.</li><li><strong>Tree id.</strong> Git's hash of a whole set of files. Two folders with the same files have the same tree id. VerdictLite uses it to know <em>exactly</em> which version of your files a check ran on.</li></ul>
+<h2 id="2-install-verdictlite">2. Install VerdictLite</h2>
+<p>Install it once per machine, in its own folder. Keep it <strong>outside</strong> the repos it checks. That way a change in a repo cannot edit the tool that judges it.</p>
+<pre tabindex="0"><code class="lang-sh">git clone https://github.com/scottconverse/verdictlite.git
+cd verdictlite
+pnpm install
+pnpm build
+npm link</code></pre>
+<p><code>npm link</code> puts the <code>vlite</code> command on your PATH. Check it:</p>
+<pre tabindex="0"><code class="lang-sh">vlite --help</code></pre>
+<p>You can skip <code>npm link</code>. Then call the tool as <code>node /path/to/verdictlite/dist/cli.js</code>. The git hooks do not need <code>vlite</code> on PATH. They call the exact <code>node</code> and <code>dist/cli.js</code> that ran <code>vlite install</code>.</p>
+<p><strong>To update:</strong> <code>git pull</code>, then <code>pnpm install</code> and <code>pnpm build</code> again.</p>
+<h2 id="3-set-up-a-repo">3. Set up a repo</h2>
+<p>Do these steps in the repo you want to guard. Steps 1 to 3 are files you commit. Steps 4 and 5 are local to your machine.</p>
+<h3 id="step-1-write-vlitejson">Step 1. Write <code>vlite.json</code></h3>
+<p>Put <code>vlite.json</code> in the repo root. Here is a small example for a Node project:</p>
+<pre tabindex="0"><code class="lang-json">{
+  "version": 1,
+  "base": "origin/main",
+  "docs": ["**/*.md", "docs/**", "LICENSE*"],
+  "codeDespiteDocs": ["**/SKILL.md", ".claude/**", "REVIEW.md"],
+  "parts": [
+    {
+      "name": "app",
+      "paths": ["src/**", "test/**"],
+      "checks": [
+        { "name": "lint", "run": "pnpm lint", "timeoutSec": 300 },
+        { "name": "tests", "run": "pnpm test", "timeoutSec": 900 }
+      ]
+    }
+  ],
+  "tests": { "paths": ["test/**", "**/*.test.ts"], "removalsLog": "TEST-REMOVALS.md" },
+  "gate": { "mode": "observe" }
+}</code></pre>
+<p>What this says:</p>
+<ul><li><code>docs</code> files are words, not code. A change that only touches docs passes without running checks.</li><li><code>codeDespiteDocs</code> are files that look like docs but change behavior. They count as code.</li><li>Each <strong>part</strong> is one area of the repo. Its checks run only when a changed file matches its <code>paths</code>.</li><li><code>tests.paths</code> tells the built-in tamper check which files are tests.</li><li><code>gate.mode</code> is <code>observe</code>. The gate watches but never blocks. Start here.</li></ul>
+<p>See <a href="#15-config-reference-vlitejson">section 15</a> for every field.</p>
+<h3 id="step-2-write-reviewmd-optional">Step 2. Write <code>REVIEW.md</code> (optional)</h3>
+<p><code>REVIEW.md</code> holds the rules for <code>vlite review</code>. Write each rule with a short name, a trigger (what in a diff makes it apply) and what to check. For example:</p>
+<pre tabindex="0"><code class="lang-markdown"># Review rules
+
+## no-silent-catch
+Trigger: a `catch` block in the diff.
+Check: the error is logged or passed on. An empty catch is a finding.
+
+## sql-params
+Trigger: a SQL string in the diff.
+Check: values go in as parameters, never by string concatenation.</code></pre>
+<p>The reviewer is told to run only the rules whose trigger matches the diff.</p>
+<h3 id="step-3-merge-both-files-to-the-base-branch">Step 3. Merge both files to the base branch</h3>
+<p>This step matters. VerdictLite reads <code>vlite.json</code> and <code>REVIEW.md</code> <strong>from the base branch</strong>, not from your working files. So a change on a feature branch cannot loosen the checks that judge it.</p>
+<p>Until <code>vlite.json</code> is on the base branch, VerdictLite uses the copy in your working tree. It prints this warning each time:</p>
+<pre tabindex="0"><code class="lang-text">VerdictLite: vlite.json is not on the base branch yet; using the working-tree copy (bootstrap).</code></pre>
+<p>It also marks every log record with <code>"configSource": "worktree"</code>. Merge the file and the warning goes away. Run <code>git fetch</code> so <code>origin/main</code> is current.</p>
+<h3 id="step-4-install-the-git-hooks">Step 4. Install the git hooks</h3>
+<pre tabindex="0"><code class="lang-sh">vlite install --claude</code></pre>
+<p>This writes two git hooks, <code>pre-commit</code> and <code>commit-msg</code>. They run the commit gate. <code>--claude</code> also prints the Stop hook settings for Claude Code. It prints them only. It does not write any file.</p>
+<p>Notes:</p>
+<ul><li>The hooks go where git looks for hooks. That respects <code>core.hooksPath</code>. In a linked worktree they go in the shared hooks folder, so all worktrees get them.</li><li>If a hook is already there and is not VerdictLite's, it is kept as <code>pre-commit.vlite-prev</code> (or <code>commit-msg.vlite-prev</code>). It runs first. If it fails, the commit stops with its exit code.</li><li>Running <code>vlite install</code> again is safe. It updates its own hooks.</li><li>Hooks live in <code>.git</code>, so each clone needs its own <code>vlite install</code>.</li></ul>
+<h3 id="step-5-add-the-stop-hook-to-claudesettingsjson">Step 5. Add the Stop hook to <code>.claude/settings.json</code></h3>
+<p>Merge this into <code>.claude/settings.json</code> in the repo (or into <code>.claude/settings.local.json</code> if you do not want to commit it):</p>
+<pre tabindex="0"><code class="lang-json">{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "vlite stop-check",
+            "timeout": 3600
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p><code>timeout</code> is in seconds. It must be longer than your slowest checks put together. If <code>vlite</code> is not on PATH, <code>vlite install --claude</code> prints a full command to use instead, for example:</p>
+<pre tabindex="0"><code class="lang-text">If vlite is not on PATH, use this command instead: "/usr/local/bin/node" "/home/me/tools/verdictlite/dist/cli.js" stop-check</code></pre>
+<p>If the file already has a <code>Stop</code> entry, add VerdictLite's hook to the list. Do not replace the others.</p>
+<h3 id="step-6-add-a-verify-skill-recommended">Step 6. Add a <code>verify</code> skill (recommended)</h3>
+<p>The stop check runs your quick checks. A <code>verify</code> skill tells the agent how to prove a change <em>works</em>, for example by starting the app and using it, and then how to record that it did. Claude Code loads project skills from <code>.claude/skills/&lt;name&gt;/SKILL.md</code> (<a href="https://code.claude.com/docs/en/skills">skills docs</a>).</p>
+<p>Example <code>.claude/skills/verify/SKILL.md</code>:</p>
+<pre tabindex="0"><code class="lang-markdown">---
+name: verify
+description: Prove the current change works before you commit. Use after any code change.
+---
+
+1. Run the full test suite: `pnpm test 2&gt;&amp;1 | tee .verify/tests.log`.
+2. Start the app and try the changed feature the way a user would.
+   Write what you did and what you saw in `.verify/notes.md`.
+3. If anything failed, fix the cause and start again. Do not skip, sleep or
+   rerun tests to make them pass.
+4. When all of it passed, stage everything and record it:
+   `git add -A`
+   `vlite stamp verify --result pass --evidence .verify/tests.log --evidence .verify/notes.md`</code></pre>
+<p>Add <code>.verify/</code> to <code>.gitignore</code> so the evidence files do not change the tree id. The skill file is listed in <code>codeDespiteDocs</code> in the example config, so a change to it counts as code.</p>
+<h2 id="4-what-happens-in-a-normal-agent-session">4. What happens in a normal agent session</h2>
+<p>Here is one session from start to end.</p>
+<ol><li><strong>The agent edits files.</strong> Nothing happens yet.</li><li><strong>The agent tries to stop.</strong> Claude Code runs <code>vlite stop-check</code>.</li><li><strong>Same files as last pass?</strong> VerdictLite works out the tree id of the whole working tree (tracked and untracked files, <code>.gitignore</code> respected). If this exact tree already passed on this branch, it lets the agent stop at once.</li><li><strong>What changed?</strong> It lists the files changed since the last pass on this branch. If there was no pass yet, it compares with the merge-base of the base branch.</li><li><strong>Docs only?</strong> If every changed file is docs, the stop passes.</li><li><strong>Tamper check.</strong> If a changed file is a test file or a test-runner config file, the built-in <code>test-tamper</code> check runs. See <a href="#11-test-tamper-rules-and-test-removalsmd">section 11</a>.</li><li><strong>Your checks.</strong> For each part whose <code>paths</code> match a changed file, its checks run in order. The first failing check stops that part. Other parts still run.</li><li><strong>All pass:</strong> VerdictLite records the tree as passed and the agent stops. <strong>Something fails:</strong> it blocks the stop and tells the agent what failed. The agent keeps working. See <a href="#5-read-a-block-message">section 5</a>.</li><li><strong>The agent commits.</strong> The <code>pre-commit</code> and <code>commit-msg</code> hooks run the gate. The gate adds a <code>Verified-By:</code> line to the commit message. See <a href="#7-stamps-and-the-verified-by-trailer">section 7</a>.</li></ol>
+<p>A stop-check pass is not a stamp. It lets the agent stop. It does not mark the commit as verified. Only <code>vlite stamp</code> and a clean <code>vlite review</code> write stamps.</p>
+<h2 id="5-read-a-block-message">5. Read a block message</h2>
+<p>When a check fails, the agent gets a message like this one. This is real output from a test repo. The test runner's output is shortened here.</p>
+<pre tabindex="0"><code class="lang-text">VerdictLite: checks failed on this change.
+
+[app/tests] failed
+command: node --test
+exit code 1
+last lines of output:
+TAP version 13
+# Subtest: adds price times quantity
+not ok 1 - adds price times quantity
+  ...
+  error: |-
+    Expected values to be strictly equal:
+
+    11 !== 14
+  ...
+# pass 1
+# fail 1
+
+Full output: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-44-751Z-round1.txt
+
+Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</code></pre>
+<p>How to read it:</p>
+<ul><li><code>[app/tests]</code> is the part name and the check name.</li><li><code>command</code> is the exact command that ran.</li><li><code>exit code</code> is what the command returned. A check that ran out of time says <code>timed out</code> instead.</li><li><code>last lines of output</code> is the last 60 lines.</li><li><code>Full output</code> is a file with up to 2,000 lines of output, the list of changed files and each failing check.</li><li><code>Round 1 of 3</code> counts tries. See the next section.</li></ul>
+<p>Technically, the stop check prints <code>{"decision": "block", "reason": "..."}</code> to Claude Code. Claude Code shows the reason to the agent and keeps it working.</p>
+<h2 id="6-the-three-round-hand-off">6. The three-round hand-off</h2>
+<p>An agent can get stuck. It may try the same broken fix again and again. So VerdictLite counts rounds.</p>
+<ul><li>A round is one failed stop. Rounds are counted <strong>per session and per set of failing checks</strong>. If a different set of checks fails, that set starts at round 1.</li><li>A pass resets the round counts for that session.</li><li>With the default <code>maxRounds</code> of 3, rounds 1 and 2 block the stop. <strong>Round 3 does not block.</strong> It ends the session and asks for a person:</li></ul>
+<pre tabindex="0"><code class="lang-text">VerdictLite: app/tests still fails after 3 rounds. A person must look. Last failure: exit code 1. Handoff: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-49-327Z-round3.txt</code></pre>
+<p>Technically, this is <code>{"continue": false, "stopReason": "..."}</code>. Claude Code stops the agent and shows you the reason.</p>
+<p>What you do then: open the handoff file, read the output and decide. You can fix it yourself, give the agent a hint, or change the check.</p>
+<h2 id="7-stamps-and-the-verified-by-trailer">7. Stamps and the Verified-By trailer</h2>
+<p>A <strong>stamp</strong> is a line in a log that says "this check ran on this exact tree and it passed (or failed)". There are two kinds:</p>
+<ul><li><code>verify</code>: written by you or your verify skill with <code>vlite stamp verify</code>.</li><li><code>code-review</code>: written by <code>vlite review</code> when it finds nothing important.</li></ul>
+<p>Write a stamp:</p>
+<pre tabindex="0"><code class="lang-sh">git add -A
+vlite stamp verify --result pass --evidence test-run.log --note "unit and e2e tests"</code></pre>
+<pre tabindex="0"><code class="lang-text">Stamped verify pass for tree b37dc8b45064</code></pre>
+<p>Rules:</p>
+<ul><li>Evidence files must exist, or the stamp is refused. Relative paths are read from the folder you run the command in.</li><li>The stamp is for the tree id of the whole working tree at that moment.</li><li>For each kind, the latest stamp for a tree wins. A later <code>fail</code> stamp cancels an earlier <code>pass</code>.</li></ul>
+<p><strong>At commit time</strong> the gate finds the method for the exact tree being committed:</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Method</th><th scope="col">When</th></tr></thead><tbody><tr><td><code class="nw">docs</code></td><td>Every staged change is a docs file.</td></tr><tr><td><code class="nw">verify</code></td><td>A <code class="nw">verify</code> pass stamp matches the tree.</td></tr><tr><td><code class="nw">code-review</code></td><td>A <code class="nw">code-review</code> pass stamp matches the tree.</td></tr><tr><td><code class="nw">verify+code-review</code></td><td>Both match.</td></tr><tr><td><code class="nw">skipped</code></td><td>The message has a <code class="nw">Verify-Skip:</code> trailer.</td></tr><tr><td><code class="nw">none</code></td><td>None of the above.</td></tr></tbody></table></div>
+<p>The gate then adds a <strong>trailer</strong> (a <code>Key: value</code> line at the end of the commit message). Other trailers stay. An old <code>Verified-By</code> line is replaced.</p>
+<p>Real output (commit id shortened, date line removed):</p>
+<pre tabindex="0"><code class="lang-text">$ git log -1
+commit 709b7cf14af4
+Author: Demo &lt;demo@example.com&gt;
+
+    feat: add count()
+
+    Verified-By: verify</code></pre>
+<p><strong>Why a stamp might not count.</strong> The stamp is for the working tree. The commit is for the staged files. They must be the same. If you leave a file unstaged or an untracked file out of the commit, the trees differ and the method is <code>none</code>. Stage everything (<code>git add -A</code>) before you stamp and before you commit. Keep evidence files in a folder that <code>.gitignore</code> ignores.</p>
+<p><strong>A stamp shows that a step ran. It is not proof.</strong> Anyone can write one by hand. It is a speed bump that makes skipping a visible choice.</p>
+<h2 id="8-skip-the-gate-on-purpose-verify-skip">8. Skip the gate on purpose: Verify-Skip</h2>
+<p>Some commits do not need checks, for example a generated file you checked by hand. Add a <code>Verify-Skip:</code> trailer with a reason as the last paragraph of the commit message:</p>
+<pre tabindex="0"><code class="lang-text">chore: bump version
+
+Verify-Skip: generated file, checked by hand</code></pre>
+<p>The commit gets <code>Verified-By: skipped</code> and the reason goes in the log. It shows in <code>vlite gate report</code>. The trailer must be in the last paragraph of the message, where git looks for trailers.</p>
+<h2 id="9-gate-modes-off-observe-enforce">9. Gate modes: off, observe, enforce</h2>
+<p>Set the mode in <code>vlite.json</code> under <code>gate.mode</code>.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Mode</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code class="nw">off</code></td><td>Nothing. No trailer, no log.</td></tr><tr><td><code class="nw">observe</code></td><td>Never blocks. Adds the trailer. Logs commits that <em>would</em> have been blocked. This is the default.</td></tr><tr><td><code class="nw">enforce</code></td><td>Blocks a commit with method <code class="nw">none</code>.</td></tr></tbody></table></div>
+<p>When a commit is blocked in <code>enforce</code> mode, you see:</p>
+<pre tabindex="0"><code class="lang-text">VerdictLite: commit blocked. Nothing shows this exact change was verified (method: none).
+Do one of these, then commit again:
+  1. Run the checks, then:  vlite stamp verify --result pass --evidence &lt;log file&gt;
+  2. Get the AI review:     vlite review
+  3. Skip on purpose: add this line at the end of the commit message:
+       Verify-Skip: &lt;why this commit does not need it&gt;
+A stamp only counts for the exact staged tree. Stage everything first (git add -A).</code></pre>
+<p><strong>The escape.</strong> After two blocks within 30 minutes, the third try goes through. It is logged as an escape. This stops a person from being locked out of their own repo. The count is per repo, not per session.</p>
+<p><strong>When to switch.</strong> Start in <code>observe</code>. Run <code>vlite gate report</code> after a week or two. Look at the "would have been blocked" count and at the commits behind it. If most of them really should have been checked, and your team has a working verify skill, switch to <code>enforce</code> on the base branch. If many would-blocks were fine commits, fix your <code>docs</code> globs or your workflow first.</p>
+<p>Remember the mode is read from the base branch. Changing it on a feature branch does nothing until it is merged.</p>
+<h2 id="10-run-an-ai-review">10. Run an AI review</h2>
+<pre tabindex="0"><code class="lang-sh">vlite review</code></pre>
+<p>What it does:</p>
+<ol><li>Reads the rules from <code>REVIEW.md</code> <strong>on the base branch</strong>.</li><li>Makes a diff from the merge-base to your working tree. The diff is cut at 200 KB, and the prompt says so.</li><li>Adds earlier review rounds on this branch, so the reviewer can check whether earlier findings were fixed.</li><li>Sends the prompt on stdin to the review command. By default that is <code>claude -p</code>. Set <code>review.command</code> and <code>review.args</code> to change it, for example <code>"args": ["-p", "--model", "sonnet"]</code>.</li><li>Expects strict JSON back: a list of findings, each with a severity, file, line, rule, problem and evidence.</li></ol>
+<p>Severities:</p>
+<ul><li><code>important</code>: must fix before merge.</li><li><code>nit</code>: small and optional.</li><li><code>pre-existing</code>: a problem this diff did not add.</li></ul>
+<p>An unknown severity counts as <code>important</code>.</p>
+<p>Results and exit codes:</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Result</th><th scope="col">Exit code</th><th scope="col">Stamp</th></tr></thead><tbody><tr><td>No <code class="nw">important</code> findings</td><td>0</td><td>A <code class="nw">code-review</code> pass stamp for the current tree</td></tr><tr><td>One or more <code class="nw">important</code> findings</td><td>2</td><td>None</td></tr><tr><td>The reviewer failed, timed out or did not reply with the JSON asked for</td><td>1</td><td>None. The raw reply is saved.</td></tr></tbody></table></div>
+<p>Each round is saved as <code>reviews/&lt;branch&gt;/&lt;n&gt;.json</code> in the state folder. To tell the reviewer what you changed, add a note: <code>vlite review --round-note "fixed the null check"</code>. To compare with another base: <code>vlite review --base origin/release</code>.</p>
+<p>If <code>REVIEW.md</code> is missing on the base branch, the review still runs with general rules and says so.</p>
+<h2 id="11-test-tamper-rules-and-test-removalsmd">11. Test-tamper rules and TEST-REMOVALS.md</h2>
+<p>The article's rule is: do not skip, sleep or rerun to make tests pass. If you remove a test, write down why. VerdictLite has a built-in check for this called <code>test-tamper</code>. It runs inside the stop check. You cannot turn it off in config, but it only looks at files you list in <code>tests.paths</code> and at known test-runner config files.</p>
+<p>It looks at <strong>added and removed lines</strong> in changed test files. It fails on:</p>
+<ul><li><strong>Added skip markers:</strong> <code>@pytest.mark.skip</code>, <code>pytest.skip(</code>, <code>@unittest.skip</code>, <code>xfail</code>, <code>.skip(</code>, <code>it.skip</code>, <code>test.skip</code>, <code>describe.skip</code>, <code>xit(</code>, <code>xdescribe(</code>, <code>xtest(</code>, <code>test.fixme</code>.</li><li><strong>Added fixed waits:</strong> <code>time.sleep(</code>, <code>asyncio.sleep(</code>, <code>waitForTimeout(</code>, and <code>setTimeout</code> used as a wait.</li><li><strong>Added retries:</strong> <code>@flaky</code>, <code>pytest.mark.flaky</code>, <code>--reruns</code>, <code>.retries(N)</code>, <code>jest.retryTimes(</code>, or a raised <code>retries:</code> value. Retries are also checked in these config files, even if they are not in <code>tests.paths</code>: <code>playwright.config.*</code>, <code>vitest.config.*</code>, <code>vite.config.*</code>, <code>jest.config.*</code>, <code>pytest.ini</code>, <code>pyproject.toml</code>, <code>setup.cfg</code>, <code>tox.ini</code>, <code>conftest.py</code>.</li><li><strong>Removed tests:</strong> a removed <code>def test_*</code>, <code>it("...")</code> or <code>test("...")</code> that is not added again anywhere in the change.</li></ul>
+<p>Real output when an agent skipped one test and deleted another:</p>
+<pre tabindex="0"><code class="lang-text">[test-tamper] failed
+command: (built-in)
+exit code 1
+last lines of output:
+tests/price.test.js:5 [skip] test.skip('adds price times quantity', () =&gt; {
+  -&gt; Remove the skip or xfail. Fix the test or the code instead.
+tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () =&gt; {
+  -&gt; Test "rounds to cents" was removed. Restore it, or add a line to TEST-REMOVALS.md with its name and why it was removed.</code></pre>
+<p>In that run the test suite itself passed, because the failing test was skipped. The tamper check is what caught it.</p>
+<p><strong>Removing a test on purpose.</strong> Add a line to the removals log (<code>TEST-REMOVALS.md</code> by default) in the same change. The line must contain the test's name:</p>
+<pre tabindex="0"><code class="lang-markdown">- rounds to cents: covered by the new money module tests; old helper removed.</code></pre>
+<p>Only <strong>added</strong> lines in the log count. A name that was already in the log does not cover a new removal.</p>
+<p><strong>Limits.</strong> The detectors are simple regular expressions. They can miss things, and they can flag lines that are fine. A moved test (removed in one file, added in another) passes. A renamed test counts as removed. If <code>tests.paths</code> is empty, only the retry check on config files runs.</p>
+<h2 id="12-the-gate-report">12. The gate report</h2>
+<pre tabindex="0"><code class="lang-sh">vlite gate report --days 7</code></pre>
+<p>Real output from a test repo in <code>observe</code> mode:</p>
+<pre tabindex="0"><code class="lang-text">VerdictLite gate report, last 7 days (mode now: observe)
+Commits judged: 4
+  verify: 1
+  docs: 1
+  none: 1
+  skipped: 1
+Would have been blocked (observe): 1
+Blocked (enforce): 0
+Let through after two blocks (escape): 0
+Overrides (Verify-Skip): 1
+  2026-11-18 18:13  generated file, checked by hand</code></pre>
+<ul><li><strong>Commits judged:</strong> commits that went through, with a count per method.</li><li><strong>Would have been blocked:</strong> commits with method <code>none</code> in <code>observe</code> mode.</li><li><strong>Blocked:</strong> commit attempts stopped in <code>enforce</code> mode.</li><li><strong>Escape:</strong> commits let through after two blocks.</li><li><strong>Overrides:</strong> <code>Verify-Skip</code> commits, with time (UTC) and reason.</li></ul>
+<p><code>--days</code> defaults to 7.</p>
+<h2 id="13-where-state-lives">13. Where state lives</h2>
+<p>VerdictLite keeps nothing in your repo. Its state is in <code>~/.verdictlite/</code>. Set the <code>VLITE_HOME</code> environment variable to use another folder.</p>
+<p>Each repo gets a folder named after the repo folder plus a short hash of its git folder, for example <code>~/.verdictlite/shop-ea1973230c/</code>. All worktrees of one repo share it.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">File</th><th scope="col">What it holds</th></tr></thead><tbody><tr><td><code class="nw">state.json</code></td><td>The last passing tree per branch, round counters, pending gate records, recent blocks.</td></tr><tr><td><code class="nw">stop.jsonl</code></td><td>One line per stop check: pass, block, handoff or error.</td></tr><tr><td><code class="nw">stamps.jsonl</code></td><td>One line per stamp.</td></tr><tr><td><code class="nw">gate.jsonl</code></td><td>One line per gate decision.</td></tr><tr><td><code class="nw">handoffs/</code></td><td>Full output of each failing stop-check round.</td></tr><tr><td><code>reviews/&lt;branch&gt;/&lt;n&gt;.json</code></td><td>Each review round.</td></tr></tbody></table></div>
+<p>The <code>.jsonl</code> files are append-only logs, one JSON object per line, with ISO times. You can delete the folder to reset VerdictLite for a repo.</p>
+<h2 id="14-troubleshooting">14. Troubleshooting</h2>
+<p><strong>The tool broke, and the agent stopped anyway.</strong> That is on purpose. If VerdictLite itself fails (not a check, the tool), the stop check prints <code>VerdictLite stop-check internal error (ignored, not blocking): ...</code> and lets the agent stop. It logs <code>"result": "error"</code> in <code>stop.jsonl</code>. A failing <em>check</em> always blocks. A broken <em>tool</em> never does. The same goes for the gate: a broken <code>vlite.json</code> prints <code>VerdictLite gate skipped: ...</code> and lets the commit through.</p>
+<p><strong>"vlite.json is not on the base branch yet".</strong> Merge <code>vlite.json</code> to the base branch and run <code>git fetch</code>. VerdictLite looks for <code>vlite.json</code> on <code>origin/main</code> first, then <code>main</code>. If the file there names another <code>base</code> that has its own <code>vlite.json</code>, that copy is used. If your default branch has another name, such as <code>master</code>, VerdictLite 0.1.0 will not find the config there and stays in bootstrap mode.</p>
+<p><strong>Nothing happens at all.</strong> With no <code>vlite.json</code> anywhere, every command exits 0 and does nothing. Check that you are in the right repo and that the file is named <code>vlite.json</code>.</p>
+<p><strong>My old git hooks.</strong> <code>vlite install</code> keeps a foreign hook as <code>&lt;name&gt;.vlite-prev</code> and runs it first. If both the hook and a <code>.vlite-prev</code> file already exist, install stops with <code>... is not ours and ... already exists. Move one of them by hand.</code> Merge or move one of them, then run install again. If a hook manager sets <code>core.hooksPath</code>, install writes to that folder. If the manager rewrites the folder later, run <code>vlite install</code> again. VerdictLite 0.1.0 has not been tested with specific hook managers.</p>
+<p><strong>The hooks stopped working after I moved VerdictLite or changed Node.</strong> The hooks call the exact <code>node</code> and <code>dist/cli.js</code> paths from install time. Run <code>vlite install</code> again in each repo.</p>
+<p><strong>My stamp does not count; the trailer says <code>none</code>.</strong> The staged tree must match the tree you stamped. Run <code>git add -A</code>, stamp again and commit. Check that evidence files are ignored by git.</p>
+<p><strong>The stop check is slow.</strong> It hashes the whole working tree each time and runs about 15 git commands. On Windows that is about 1 to 2 seconds before any check runs. Large repos take longer. Your checks add their own time.</p>
+<p><strong>A check times out in the hook but not by hand.</strong> Raise <code>timeoutSec</code> for the check, and raise the Stop hook <code>timeout</code> in <code>.claude/settings.json</code> above the total of your checks.</p>
+<p><strong>Run the stop check by hand.</strong> <code>vlite stop-check --session my-test</code> runs it without Claude Code. It prints the JSON that Claude Code would get, or nothing if it passes.</p>
+<p><strong>Uninstall.</strong></p>
+<pre tabindex="0"><code class="lang-sh">vlite install --uninstall</code></pre>
+<p>This removes VerdictLite's hooks and puts back any <code>.vlite-prev</code> hooks. Then remove the <code>vlite stop-check</code> entry from <code>.claude/settings.json</code>, delete <code>vlite.json</code> if you like, and delete the repo's folder under <code>~/.verdictlite/</code>. To remove the command, run <code>npm unlink -g verdictlite</code> and delete the clone.</p>
+<h2 id="15-config-reference-vlitejson">15. Config reference: vlite.json</h2>
+<p><code>vlite.json</code> is a JSON object. Unknown keys are ignored. A bad value stops the command with a list of every error.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Default</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code class="nw">version</code></td><td>number</td><td>required</td><td>Must be <code class="nw">1</code>.</td></tr><tr><td><code class="nw">base</code></td><td>string</td><td><code class="nw">"origin/main"</code></td><td>The base branch ref. Used for the merge-base, for review rules, and to look for the config.</td></tr><tr><td><code class="nw">docs</code></td><td>list of globs</td><td><code class="nw">[]</code></td><td>Files that count as docs.</td></tr><tr><td><code class="nw">codeDespiteDocs</code></td><td>list of globs</td><td><code class="nw">[]</code></td><td>Files that match <code class="nw">docs</code> but count as code.</td></tr><tr><td><code class="nw">parts</code></td><td>list</td><td><code class="nw">[]</code></td><td>Areas of the repo and their checks. See below.</td></tr><tr><td><code class="nw">parts[].name</code></td><td>string</td><td>required</td><td>Name shown in messages, as <code class="nw">name/check</code>.</td></tr><tr><td><code class="nw">parts[].paths</code></td><td>list of globs</td><td>required, at least one</td><td>A changed file matching one of these runs the part.</td></tr><tr><td><code class="nw">parts[].cwd</code></td><td>string</td><td><code class="nw">"."</code></td><td>Folder, from the repo root, where checks run.</td></tr><tr><td><code class="nw">parts[].checks</code></td><td>list</td><td>required, at least one</td><td>The checks, run in order.</td></tr><tr><td><code class="nw">checks[].name</code></td><td>string</td><td>required</td><td>Check name.</td></tr><tr><td><code class="nw">checks[].run</code></td><td>string</td><td>required</td><td>Command line. Runs through the shell: <code class="nw">cmd.exe</code> on Windows, <code class="nw">sh</code> elsewhere.</td></tr><tr><td><code class="nw">checks[].cwd</code></td><td>string</td><td>the part's <code class="nw">cwd</code></td><td>Folder for this check.</td></tr><tr><td><code class="nw">checks[].timeoutSec</code></td><td>number</td><td><code class="nw">600</code></td><td>Seconds before the check is killed and counts as failed.</td></tr><tr><td><code class="nw">prChecks</code></td><td>list of checks</td><td><code class="nw">[]</code></td><td>Checked for errors but <strong>not run by any command in 0.1.0</strong>.</td></tr><tr><td><code class="nw">tests.paths</code></td><td>list of globs</td><td><code class="nw">[]</code></td><td>Test files for the tamper check.</td></tr><tr><td><code class="nw">tests.removalsLog</code></td><td>string</td><td><code class="nw">"TEST-REMOVALS.md"</code></td><td>Where removed tests are written down.</td></tr><tr><td><code class="nw">maxRounds</code></td><td>whole number</td><td><code class="nw">3</code></td><td>The failing round that hands off to a person.</td></tr><tr><td><code class="nw">gate.mode</code></td><td><code class="nw">"off"</code>, <code class="nw">"observe"</code>, <code class="nw">"enforce"</code></td><td><code class="nw">"observe"</code></td><td>Commit gate mode.</td></tr><tr><td><code class="nw">review.command</code></td><td>string</td><td><code class="nw">"claude"</code></td><td>Reviewer command. The env var <code class="nw">VLITE_REVIEW_CMD</code> overrides it.</td></tr><tr><td><code class="nw">review.args</code></td><td>list of strings</td><td><code class="nw">["-p"]</code></td><td>Arguments for the reviewer.</td></tr><tr><td><code class="nw">review.rulesFile</code></td><td>string</td><td><code class="nw">"REVIEW.md"</code></td><td>Rules file, read from the base branch.</td></tr><tr><td><code class="nw">review.timeoutSec</code></td><td>number</td><td><code class="nw">900</code></td><td>Seconds before the review is stopped.</td></tr></tbody></table></div>
+<p><strong>Globs.</strong> Paths are matched from the repo root with <code>/</code> as the separator.</p>
+<ul><li><code>**</code> matches any number of folders, including none. <code>**/*.md</code> matches <code>README.md</code> and <code>docs/a/b.md</code>.</li><li><code>*</code> matches any text inside one name. <code>src/*.js</code> matches <code>src/a.js</code> but not <code>src/lib/a.js</code>.</li><li><code>?</code> matches one character.</li><li><code>dir/**</code> matches everything under <code>dir</code>.</li></ul>
+<p>A file is docs when it matches <code>docs</code> and does not match <code>codeDespiteDocs</code>.</p>
+<p><strong>A full example:</strong></p>
+<pre tabindex="0"><code class="lang-json">{
+  "version": 1,
+  "base": "origin/main",
+  "docs": ["**/*.md", "docs/**", "LICENSE*"],
+  "codeDespiteDocs": ["**/SKILL.md", ".claude/**", "REVIEW.md"],
+  "parts": [
+    { "name": "backend", "paths": ["app/**/*.py", "tests/**"], "cwd": ".",
+      "checks": [ { "name": "lint", "run": "uv run ruff check .", "timeoutSec": 300 },
+                  { "name": "tests", "run": "uv run pytest -q -x", "timeoutSec": 900 } ] },
+    { "name": "web", "paths": ["web/**"], "cwd": "web",
+      "checks": [ { "name": "typecheck", "run": "pnpm tsc --noEmit" },
+                  { "name": "tests", "run": "pnpm vitest run" } ] }
+  ],
+  "tests": { "paths": ["tests/**", "**/*.spec.ts", "**/*.test.ts"], "removalsLog": "TEST-REMOVALS.md" },
+  "maxRounds": 3,
+  "gate": { "mode": "observe" },
+  "review": { "command": "claude", "args": ["-p", "--model", "sonnet"], "rulesFile": "REVIEW.md", "timeoutSec": 900 }
+}</code></pre>
+<h2 id="16-command-reference">16. Command reference</h2>
+<p>Every command takes <code>--repo DIR</code>. The default is the current folder.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>vlite install [--claude] [--uninstall]</code></td><td>Writes or removes the git hooks. <code class="nw">--claude</code> prints the Stop hook settings.</td></tr><tr><td><code>vlite stop-check [--session ID]</code></td><td>The Claude Code Stop hook. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With <code class="nw">--session</code> it does not read stdin, for runs by hand.</td></tr><tr><td><code>vlite stamp &lt;verify|code-review&gt; --result &lt;pass|fail&gt; [--evidence PATH ...] [--note TEXT]</code></td><td>Writes a stamp for the current working tree. <code class="nw">--evidence</code> can be given more than once.</td></tr><tr><td><code class="nw">vlite gate pre-commit</code></td><td>Called by the <code class="nw">pre-commit</code> hook. Records the method. Never blocks.</td></tr><tr><td><code>vlite gate commit-msg FILE</code></td><td>Called by the <code class="nw">commit-msg</code> hook. Blocks in <code class="nw">enforce</code> mode and adds the trailer.</td></tr><tr><td><code>vlite gate report [--days N]</code></td><td>Prints the gate report.</td></tr><tr><td><code>vlite review [--base REF] [--round-note TEXT]</code></td><td>Runs one AI review round.</td></tr></tbody></table></div>
+<p>Environment variables:</p>
+<ul><li><code>VLITE_HOME</code>: where state lives. Default <code>~/.verdictlite</code>.</li><li><code>VLITE_REVIEW_CMD</code>: replaces <code>review.command</code>.</li></ul>
+<h2 id="17-faq">17. FAQ</h2>
+<p><strong>Does VerdictLite prove my code is correct?</strong> No. It proves that your checks ran on this exact set of files and passed, or that someone said so. The checks are only as good as the ones you write.</p>
+<p><strong>Can the agent cheat?</strong> Yes, if it tries. It can write a stamp by hand, commit with <code>git commit --no-verify</code>, or get around the tamper regexes. VerdictLite makes these choices visible in the logs and the commit trailers. It does not make them impossible.</p>
+<p><strong>Why read the config from the base branch?</strong> So a change cannot weaken the checks that judge it. A feature branch that edits <code>vlite.json</code> or <code>REVIEW.md</code> is still judged by the base branch copy.</p>
+<p><strong>Does it work with agents other than Claude Code?</strong> The commit gate, stamps and review are plain git hooks and CLI commands. They work with any agent or person. The stop check needs Claude Code's Stop hook, and the test-tamper check runs inside the stop check. Other agents get the commit gate only. You can still run <code>vlite stop-check --session NAME</code> by hand.</p>
+<p><strong>Does it send my code anywhere?</strong> Only <code>vlite review</code> does, and only to the review command you set (by default the <code>claude</code> CLI). The other commands run on your machine.</p>
+<p><strong>Do I have to use <code>vlite review</code>?</strong> No. A <code>verify</code> stamp alone gives the method <code>verify</code>.</p>
+<p><strong>What about the <code>prChecks</code> field?</strong> It is checked for errors but no command runs it in 0.1.0.</p>
+<p><strong>Is this made by Anthropic?</strong> No. It is an independent project that follows a method Anthropic's Claude Code team described in public.</p>
+<p><strong>What state is the project in?</strong> Early. Version 0.1.0 is the first release, built on 2026-11-18. It has 94 automated tests that run on Ubuntu and Windows. It is being set up on its first real repo now. Expect changes. Report problems at <a href="https://github.com/scottconverse/verdictlite/issues">https://github.com/scottconverse/verdictlite/issues</a>.</p>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap cols">
+    <div>
+      <p><strong>VerdictLite 0.1.0</strong>. Licensed under Apache-2.0.</p>
+      <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. Claude and Claude Code are products of Anthropic.</p>
+      <p>Method credit: <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a>, Addy Osmani, November 16, 2026.</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="./">Home</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite">Source on GitHub</a></li>
+        <li><a href="https://github.com/scottconverse/verdictlite/issues">Issues</a></li>
+        <li><a href="https://code.claude.com/docs/en/hooks">Claude Code hooks docs</a></li>
+        <li><a href="https://code.claude.com/docs/en/skills">Claude Code skills docs</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
