@@ -193,3 +193,7 @@ pnpm lint    # tsc --noEmit, strict
 pnpm build   # tsc to dist/
 pnpm test    # builds, then vitest; tests make throwaway repos in the OS temp dir
 ```
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
