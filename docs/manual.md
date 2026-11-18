@@ -830,7 +830,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.1 is a fix to the first release (0.1.0), built on 2026-11-18. It has 111
+Early. Version 0.1.1 is a fix to the first release (0.1.0), built on 2026-11-18. It has 113
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
