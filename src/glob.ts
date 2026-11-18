@@ -4,13 +4,35 @@
 
 const cache = new Map<string, RegExp>();
 
+export const PLACEHOLDER = '{name}';
+
 export function globToRegExp(pattern: string): RegExp {
-  const hit = cache.get(pattern);
+  return compile(pattern, false);
+}
+
+/**
+ * Like globToRegExp, but "{name}" becomes a capture group for one whole path segment.
+ * A second "{name}" in the same pattern must match the same text.
+ */
+export function templateToRegExp(pattern: string): RegExp {
+  return compile(pattern, true);
+}
+
+function compile(pattern: string, template: boolean): RegExp {
+  const key = `${template ? 't' : 'g'}:${pattern}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   let re = '';
   let i = 0;
+  let holes = 0;
   while (i < pattern.length) {
     const c = pattern[i] as string;
+    if (template && pattern.startsWith(PLACEHOLDER, i)) {
+      re += holes === 0 ? '([^/]+)' : '\\1';
+      holes += 1;
+      i += PLACEHOLDER.length;
+      continue;
+    }
     if (c === '*' && pattern[i + 1] === '*') {
       const atStart = i === 0 || pattern[i - 1] === '/';
       const next = pattern[i + 2];
@@ -20,8 +42,10 @@ export function globToRegExp(pattern: string): RegExp {
         continue;
       }
       if (atStart && next === undefined) {
-        // "dir/**" matches everything under dir; a lone "**" matches everything
-        if (re.endsWith('/')) re = re.slice(0, -1) + '(?:/.*)?';
+        // "dir/**" matches everything under dir; a lone "**" matches everything.
+        // In a template, "{name}/**" must have a file under the folder: "src/app.py" is not module "app.py".
+        if (template && re.endsWith('/')) re += '.+';
+        else if (re.endsWith('/')) re = re.slice(0, -1) + '(?:/.*)?';
         else re += '.*';
         i += 2;
         continue;
@@ -36,7 +60,7 @@ export function globToRegExp(pattern: string): RegExp {
     i += 1;
   }
   const out = new RegExp(`^${re}$`);
-  cache.set(pattern, out);
+  cache.set(key, out);
   return out;
 }
 

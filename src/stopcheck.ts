@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { allDocs, type Ctx, openRepo } from './context.js';
 import { matchAny } from './glob.js';
 import { baseTree, branchName, changedFiles, diffText, isTree, repoRoot, worktreeTree } from './git.js';
+import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
 import { appendJsonl, readState, stateDir, writeState } from './state.js';
 import { detectTamper, formatHits, parseDiff, RETRY_CONFIG_FILES } from './tamper.js';
@@ -84,8 +85,22 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
   }
 
   const ran: string[] = [];
-  for (const part of config.parts) {
-    if (!changed.some((f) => matchAny(part.paths, f))) continue;
+  const skipped: Record<string, string> = {};
+  const plan = planParts(config.parts, changed, config.maxExpandedParts);
+  for (const t of plan.tooMany) {
+    const output = [
+      `${t.names.length} modules changed for the template part "${t.template}"; the limit is ${config.maxExpandedParts} (maxExpandedParts).`,
+      `None of these parts ran: ${t.names.join(', ')}`,
+      'Run the wider check by hand, or raise maxExpandedParts on the base branch.',
+    ].join('\n');
+    failures.push({ check: `${t.template} (too many parts)`, command: '(built-in)', code: 1, timedOut: false, output });
+  }
+  for (const part of plan.parts) {
+    const missing = part.requires.filter((p) => !existsSync(resolve(root, p)));
+    if (missing.length > 0) {
+      skipped[part.name] = `requires missing: ${missing.join(', ')}`;
+      continue;
+    }
     for (const check of part.checks) {
       const name = `${part.name}/${check.name}`;
       ran.push(name);
@@ -96,8 +111,9 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
     }
   }
 
+  const extra = Object.keys(skipped).length > 0 ? { skipped } : {};
   if (failures.length === 0) {
-    pass({ ran });
+    pass({ ran, ...extra });
     return;
   }
 
@@ -116,14 +132,14 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
       `Round ${round} of ${config.maxRounds}. Fix the cause. Do not skip, sleep or rerun to pass.`,
     ].join('\n\n');
     process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`);
-    ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, log: logPath });
+    ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, ...extra, log: logPath });
     return;
   }
   const first = failures[0] as Failure;
   const why = first.timedOut ? 'it timed out' : `exit code ${String(first.code)}`;
   const stopReason = `VerdictLite: ${names.join(', ')} still fails after ${round} rounds. A person must look. Last failure: ${why}. Handoff: ${logPath}`;
   process.stdout.write(`${JSON.stringify({ continue: false, stopReason })}\n`);
-  ctx.log('stop', { ...base, result: 'handoff', round, failing: names, ran, handoff: logPath });
+  ctx.log('stop', { ...base, result: 'handoff', round, failing: names, ran, ...extra, handoff: logPath });
 }
 
 function describe(f: Failure): string {
