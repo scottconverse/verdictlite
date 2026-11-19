@@ -4,7 +4,7 @@ import type { Ctx } from './context.js';
 import { headSha, worktreeTree } from './git.js';
 import { readJsonl } from './state.js';
 
-export type Method = 'verify' | 'code-review';
+export type Method = 'verify' | 'code-review' | 'stop-check';
 
 export interface StampRecord {
   time: string;
@@ -36,7 +36,7 @@ export function writeStamp(ctx: Ctx, method: Method, result: 'pass' | 'fail', ev
 export function passedMethods(ctx: Ctx, tree: string): Method[] {
   const latest = new Map<Method, StampRecord>();
   for (const s of readJsonl<StampRecord>(join(ctx.stateDir, 'stamps.jsonl'))) if (s.tree === tree) latest.set(s.method, s);
-  return (['verify', 'code-review'] as const).filter((m) => latest.get(m)?.result === 'pass');
+  return (['verify', 'code-review', 'stop-check'] as const).filter((m) => latest.get(m)?.result === 'pass');
 }
 
 export class UsageError extends Error {}
