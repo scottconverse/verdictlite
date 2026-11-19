@@ -108,3 +108,14 @@ export function branchName(root: string): string {
   const name = r.ok ? r.out.trim() : 'HEAD';
   return name === 'HEAD' ? 'detached' : name;
 }
+
+/**
+ * Key for per-branch state. A detached HEAD gets its commit in the key, because many worktrees
+ * can be detached at once and must not share one start point (that made a false diff of merged work).
+ */
+export function stateKey(root: string): string {
+  const name = branchName(root);
+  if (name !== 'detached') return name;
+  const r = git(root, ['rev-parse', 'HEAD']);
+  return r.ok ? `detached@${r.out.trim()}` : 'detached';
+}

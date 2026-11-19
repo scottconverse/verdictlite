@@ -255,3 +255,25 @@ if (existsSync('pkg/' + name + '/FAIL')) { console.log('tests for ' + name + ' f
     expect(ranLog(r)).toEqual([]);
   });
 });
+
+describe('stop-check on a detached HEAD', () => {
+  it('does not use a pass from another detached commit as the start point', () => {
+    const r = setup();
+    // A worktree detached at an old commit passes; its tree is saved.
+    r.git('checkout', '-q', '--detach');
+    r.write('src/app.js', 'old fine\n');
+    expect(r.vlite(['stop-check'], { input: hook(r) }).out).toBe('');
+    // Later, main gets more merged work, and a new worktree is detached at the new tip.
+    r.git('checkout', '-q', '-f', 'main');
+    r.write('src/merged1.js', 'one\n');
+    r.write('src/merged2.js', 'two\n');
+    r.commitAll('merged work');
+    r.git('checkout', '-q', '--detach');
+    r.write('src/app.js', 'worker edit\n');
+    expect(r.vlite(['stop-check'], { input: hook(r, 's2') }).out).toBe('');
+    const last = stopLog(r).at(-1) ?? {};
+    // Only the worker's own edit counts, not the merged files.
+    expect(last['changed']).toBe(1);
+    expect(last['from']).toBe(r.git('rev-parse', 'main^{tree}'));
+  });
+});

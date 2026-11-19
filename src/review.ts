@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Ctx } from './context.js';
-import { baseTree, branchName, diffText, refExists, showFile, worktreeTree } from './git.js';
+import { baseTree, stateKey, diffText, refExists, showFile, worktreeTree } from './git.js';
 import { quoteArg, runShell } from './proc.js';
 import { UsageError, writeStamp } from './stamp.js';
 
@@ -42,7 +42,7 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
   const diffTruncated = Buffer.byteLength(diff) > MAX_DIFF;
   if (diffTruncated) diff = diff.slice(0, MAX_DIFF);
 
-  const dir = join(ctx.stateDir, 'reviews', branchName(root).replace(/[^A-Za-z0-9._-]/g, '_'));
+  const dir = join(ctx.stateDir, 'reviews', stateKey(root).replace(/[^A-Za-z0-9._-]/g, '_'));
   mkdirSync(dir, { recursive: true });
   const priors = readdirSync(dir)
     .map((f) => /^(\d+)\.json$/.exec(f)?.[1])

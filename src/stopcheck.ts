@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { allDocs, type Ctx, openRepo } from './context.js';
 import { matchAny } from './glob.js';
-import { baseTree, branchName, changedFiles, diffText, isTree, repoRoot, worktreeTree } from './git.js';
+import { baseTree, stateKey, changedFiles, diffText, isTree, repoRoot, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
@@ -130,7 +130,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const { root, config } = ctx;
   const tree = worktreeTree(root);
   const state = readState(ctx.stateDir);
-  const branch = branchName(root);
+  const branch = stateKey(root);
   const last = state.lastPassTree?.[branch];
   if (last === tree) return { kind: 'pass' };
 
