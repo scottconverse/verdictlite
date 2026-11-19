@@ -12,7 +12,8 @@ import { stopCheck } from './stopcheck.js';
 const HELP = `vlite - VerdictLite: verification gates for AI coding agents
 
   vlite install [--repo DIR] [--claude] [--uninstall]
-  vlite stop-check [--session ID]            (Claude Code Stop hook; reads hook JSON on stdin)
+  vlite stop-check [--session ID] [--global] (Claude Code Stop hook; reads hook JSON on stdin)
+                                             --global: user-level hook; checks the repos the session edited
   vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]
   vlite gate <pre-commit | commit-msg FILE | report [--days N]>
   vlite review [--base REF] [--round-note TEXT]
@@ -21,7 +22,7 @@ Every command takes --repo DIR (default: the current folder).
 `;
 
 const VALUE_FLAGS = new Set(['repo', 'session', 'result', 'evidence', 'note', 'days', 'base', 'round-note']);
-const BOOL_FLAGS = new Set(['claude', 'uninstall', 'help']);
+const BOOL_FLAGS = new Set(['claude', 'uninstall', 'help', 'global']);
 
 interface Args {
   pos: string[];
@@ -61,7 +62,7 @@ async function main(argv: string[]): Promise<number> {
   if (cmd === 'stop-check') {
     const session = one(args, 'session');
     const repo = one(args, 'repo');
-    return stopCheck({ ...(session ? { session } : {}), ...(repo ? { repo } : {}) });
+    return stopCheck({ ...(session ? { session } : {}), ...(repo ? { repo } : {}), global: args.flags.has('global') });
   }
   if (cmd === 'install') {
     const root = repoRoot(dir);

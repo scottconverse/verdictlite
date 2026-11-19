@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.1. Early stage. See [Status](#status).
+- Version: 0.1.2. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -162,6 +162,22 @@ It does not write them.
 
 The timeout is in seconds. Make it longer than all your checks together.
 
+A project hook loads only when a Claude Code session starts inside the repo.
+If your sessions or agent workers start in another folder and edit the repo
+from there, also add the hook to your user settings (`~/.claude/settings.json`)
+with `--global`:
+
+```json
+{ "type": "command", "command": "vlite stop-check --global", "timeout": 3600 }
+```
+
+`--global` checks every repo with a `vlite.json` that the session edited with
+its edit tools (Edit, Write, MultiEdit, NotebookEdit) since your last prompt.
+It also checks the session folder's repo, unless that repo has its own project
+hook. In folders and repos without a `vlite.json` it does nothing. Limit: a file
+changed only by a shell command is not seen, unless the session started in that
+repo.
+
 **6. Add a verify skill** (recommended). A
 [Claude Code skill](https://code.claude.com/docs/en/skills) at
 `.claude/skills/verify/SKILL.md` tells the agent how to prove the change works
@@ -191,9 +207,11 @@ vlite install --claude      # install and print the Stop hook settings
 vlite install --uninstall   # remove the hooks and restore old ones
 ```
 
-### `vlite stop-check [--session ID]`
+### `vlite stop-check [--session ID] [--global]`
 
-The Claude Code Stop hook. It runs when the agent tries to stop.
+The Claude Code Stop hook. It runs when the agent tries to stop. With
+`--global` (for the user-level hook) it does the steps below for each repo the
+session edited this turn. It sends one combined message.
 
 1. It works out the tree id (git's hash of the whole set of files) of the
    working tree. If this tree already passed on this branch, it lets the agent
@@ -443,7 +461,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.1.
+  another name, such as `master`, is not searched in 0.1.2.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -451,14 +469,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.1 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.2 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.1 is a fix to the first release (0.1.0), built on 2026-11-18. It is being set
+Early. Version 0.1.2 is a fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 113 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 120 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

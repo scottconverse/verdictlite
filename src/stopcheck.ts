@@ -5,14 +5,19 @@ import { matchAny } from './glob.js';
 import { baseTree, branchName, changedFiles, diffText, isTree, repoRoot, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
+import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
 import { appendJsonl, readState, stateDir, writeState } from './state.js';
 import { detectTamper, formatHits, parseDiff, RETRY_CONFIG_FILES } from './tamper.js';
 
 interface HookInput {
   session_id?: string;
   cwd?: string;
+  transcript_path?: string;
   stop_hook_active?: boolean;
 }
+
+/** What judge decided for one repo. */
+type Verdict = { kind: 'pass' } | { kind: 'block'; reason: string } | { kind: 'handoff'; stopReason: string };
 
 interface Failure {
   check: string; // "part/check"
@@ -32,16 +37,70 @@ function readHookInput(): HookInput {
   }
 }
 
-/** The Claude Code Stop hook. Always exits 0: it speaks through JSON on stdout, and fails open on its own errors. */
-export async function stopCheck(opts: { repo?: string; session?: string }): Promise<number> {
+/**
+ * The Claude Code Stop hook. Always exits 0: it speaks through JSON on stdout, and fails open on its own errors.
+ * Default: checks the repo of the session folder. With global (a user-level hook), it checks every repo with a
+ * vlite.json that the session edited this turn, plus the session folder's repo when that repo has no project hook.
+ */
+export async function stopCheck(opts: { repo?: string; session?: string; global?: boolean }): Promise<number> {
   // A review session (started by `vlite review`) must never run checks or be blocked.
   if (process.env['VLITE_REVIEWER'] === '1') return 0;
   const input = opts.session ? {} : readHookInput();
   const dir = resolve(input.cwd ?? opts.repo ?? process.cwd());
+  const session = opts.session ?? input.session_id ?? 'manual';
+  const hookActive = input.stop_hook_active === true;
+  if (!opts.global) {
+    const v = await judgeDir(dir, session, hookActive);
+    emit(v ? [v] : []);
+    return 0;
+  }
+  const own = safeRoot(dir);
+  const covered = own !== null && hasProjectHook(own);
+  const roots = new Set<string>(readSessionRoots(session));
+  if (own && !covered) roots.add(own);
+  if (input.transcript_path) {
+    try {
+      for (const f of editedFiles(input.transcript_path, dir)) {
+        const r = rootOf(f);
+        if (r) roots.add(r);
+      }
+    } catch (e) {
+      process.stderr.write(`VerdictLite: could not read the transcript (ignored): ${(e as Error).message}\n`);
+    }
+  }
+  // The project hook already checks the session folder's repo; do not run it twice.
+  if (own && covered) roots.delete(own);
+  const verdicts: Verdict[] = [];
+  const stillFailing: string[] = [];
+  for (const root of roots) {
+    const v = await judgeDir(root, session, hookActive);
+    if (!v) continue;
+    verdicts.push(v);
+    if (v.kind === 'block') stillFailing.push(root);
+  }
+  try {
+    writeSessionRoots(session, stillFailing);
+  } catch {
+    // losing this list only means the next stop may not re-check that repo
+  }
+  emit(verdicts);
+  return 0;
+}
+
+function safeRoot(dir: string): string | null {
+  try {
+    return repoRoot(dir);
+  } catch {
+    return null;
+  }
+}
+
+/** Runs judge for one folder. Null when it is not a vlite repo, or on an internal error (fail open). */
+async function judgeDir(dir: string, session: string, hookActive: boolean): Promise<Verdict | null> {
   try {
     const ctx = openRepo(dir);
-    if (!ctx) return 0;
-    await judge(ctx, opts.session ?? input.session_id ?? 'manual', input.stop_hook_active === true);
+    if (!ctx) return null;
+    return await judge(ctx, session, hookActive);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     process.stderr.write(`VerdictLite stop-check internal error (ignored, not blocking): ${message}\n`);
@@ -51,17 +110,29 @@ export async function stopCheck(opts: { repo?: string; session?: string }): Prom
     } catch {
       // nothing more we can do
     }
+    return null;
   }
-  return 0;
 }
 
-async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<void> {
+/** One JSON line for Claude Code. A handoff wins over a block. Passes print nothing. */
+function emit(verdicts: Verdict[]): void {
+  const stops: string[] = [];
+  const reasons: string[] = [];
+  for (const v of verdicts) {
+    if (v.kind === 'handoff') stops.push(v.stopReason);
+    else if (v.kind === 'block') reasons.push(v.reason);
+  }
+  if (stops.length > 0) process.stdout.write(`${JSON.stringify({ continue: false, stopReason: stops.join('\n') })}\n`);
+  else if (reasons.length > 0) process.stdout.write(`${JSON.stringify({ decision: 'block', reason: reasons.join('\n\n') })}\n`);
+}
+
+async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Verdict> {
   const { root, config } = ctx;
   const tree = worktreeTree(root);
   const state = readState(ctx.stateDir);
   const branch = branchName(root);
   const last = state.lastPassTree?.[branch];
-  if (last === tree) return;
+  if (last === tree) return { kind: 'pass' };
 
   const from = last && isTree(root, last) ? last : baseTree(root, ctx.base);
   const changed = changedFiles(root, from, tree);
@@ -76,7 +147,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
 
   if (changed.length === 0 || allDocs(config, changed)) {
     pass({ docsOnly: true });
-    return;
+    return { kind: 'pass' };
   }
 
   const failures: Failure[] = [];
@@ -116,7 +187,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
   const extra = Object.keys(skipped).length > 0 ? { skipped } : {};
   if (failures.length === 0) {
     pass({ ran, ...extra });
-    return;
+    return { kind: 'pass' };
   }
 
   const key = `${session}|${failures.map((f) => f.check).sort().join(',')}`;
@@ -128,20 +199,19 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<vo
 
   if (round < config.maxRounds) {
     const reason = [
-      'VerdictLite: checks failed on this change.',
+      `VerdictLite: checks failed on this change (repo ${root}).`,
       ...failures.map(describe),
       `Full output: ${logPath}`,
       `Round ${round} of ${config.maxRounds}. Fix the cause. Do not skip, sleep or rerun to pass.`,
     ].join('\n\n');
-    process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`);
     ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, ...extra, log: logPath });
-    return;
+    return { kind: 'block', reason };
   }
   const first = failures[0] as Failure;
   const why = first.timedOut ? 'it timed out' : `exit code ${String(first.code)}`;
   const stopReason = `VerdictLite: ${names.join(', ')} still fails after ${round} rounds. A person must look. Last failure: ${why}. Handoff: ${logPath}`;
-  process.stdout.write(`${JSON.stringify({ continue: false, stopReason })}\n`);
   ctx.log('stop', { ...base, result: 'handoff', round, failing: names, ran, ...extra, handoff: logPath });
+  return { kind: 'handoff', stopReason };
 }
 
 function describe(f: Failure): string {
