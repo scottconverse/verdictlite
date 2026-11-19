@@ -209,8 +209,8 @@ description: Prove the current change works before you commit. Use after any cod
 <ol><li><strong>The agent edits files.</strong> Nothing happens yet.</li><li><strong>The agent tries to stop.</strong> Claude Code runs <code>vlite stop-check</code>.</li><li><strong>Same files as last pass?</strong> VerdictLite works out the tree id of the whole working tree (tracked and untracked files, <code>.gitignore</code> respected). If this exact tree already passed on this branch, it lets the agent stop at once.</li><li><strong>What changed?</strong> It lists the files changed since the last pass on this branch. If there was no pass yet, it compares with the merge-base of the base branch.</li><li><strong>Docs only?</strong> If every changed file is docs, the stop passes.</li><li><strong>Tamper check.</strong> If a changed file is a test file or a test-runner config file, the built-in <code>test-tamper</code> check runs. See <a href="#11-test-tamper-rules-and-test-removalsmd">section 11</a>.</li><li><strong>Your checks.</strong> For each part whose <code>paths</code> match a changed file, its checks run in order. The first failing check stops that part. Other parts still run. A template part runs once for each module that changed. A part whose <code>requires</code> files are missing is skipped. See <a href="#part-templates">Part templates</a>.</li><li><strong>All pass:</strong> VerdictLite records the tree as passed and the agent stops. <strong>Something fails:</strong> it blocks the stop and tells the agent what failed. The agent keeps working. See <a href="#5-read-a-block-message">section 5</a>.</li><li><strong>The agent commits.</strong> The <code>pre-commit</code> and <code>commit-msg</code> hooks run the gate. The gate adds a <code>Verified-By:</code> line to the commit message. See <a href="#7-stamps-and-the-verified-by-trailer">section 7</a>.</li></ol>
 <p>A stop-check pass lets the agent stop. When at least one check ran and no part was skipped, it also writes a <code>stop-check</code> stamp for that exact tree, so a commit of the same files shows <code>Verified-By: stop-check</code>. A pass where no check ran (docs only, or files no part covers) writes no stamp. <code>vlite stamp</code> and a clean <code>vlite review</code> also write stamps.</p>
 <h2 id="5-read-a-block-message">5. Read a block message</h2>
-<p>When a check fails, the agent gets a message like this one. This is real output from a test repo. The test runner's output is shortened here.</p>
-<pre tabindex="0"><code class="lang-text">VerdictLite: checks failed on this change.
+<p>When a check fails, the agent gets a message like this one. This is real output from a test repo. The test runner's output and the paths are shortened here.</p>
+<pre tabindex="0"><code class="lang-text">VerdictLite: checks failed on this change (repo .../shop).
 
 [app/tests] failed
 command: node --test
@@ -223,12 +223,12 @@ not ok 1 - adds price times quantity
   error: |-
     Expected values to be strictly equal:
 
-    11 !== 14
+    9 !== 14
   ...
 # pass 1
 # fail 1
 
-Full output: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-44-751Z-round1.txt
+Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-round1.txt
 
 Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</code></pre>
 <p>How to read it:</p>
@@ -237,7 +237,7 @@ Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</code></pre>
 <h2 id="6-the-three-round-hand-off">6. The three-round hand-off</h2>
 <p>An agent can get stuck. It may try the same broken fix again and again. So VerdictLite counts rounds.</p>
 <ul><li>A round is one failed stop. Rounds are counted <strong>per session and per set of failing checks</strong>. If a different set of checks fails, that set starts at round 1.</li><li>A pass resets the round counts for that session.</li><li>With the default <code>maxRounds</code> of 3, rounds 1 and 2 block the stop. <strong>Round 3 does not block.</strong> It ends the session and asks for a person:</li></ul>
-<pre tabindex="0"><code class="lang-text">VerdictLite: app/tests still fails after 3 rounds. A person must look. Last failure: exit code 1. Handoff: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-49-327Z-round3.txt</code></pre>
+<pre tabindex="0"><code class="lang-text">VerdictLite: app/tests still fails after 3 rounds. A person must look. Last failure: exit code 1. Handoff: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-47-492Z-round3.txt</code></pre>
 <p>Technically, this is <code>{"continue": false, "stopReason": "..."}</code>. Claude Code stops the agent and shows you the reason.</p>
 <p>What you do then: open the handoff file, read the output and decide. You can fix it yourself, give the agent a hint, or change the check.</p>
 <h2 id="7-stamps-and-the-verified-by-trailer">7. Stamps and the Verified-By trailer</h2>
@@ -246,7 +246,7 @@ Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</code></pre>
 <p>Write a stamp:</p>
 <pre tabindex="0"><code class="lang-sh">git add -A
 vlite stamp verify --result pass --evidence test-run.log --note "unit and e2e tests"</code></pre>
-<pre tabindex="0"><code class="lang-text">Stamped verify pass for tree b37dc8b45064</code></pre>
+<pre tabindex="0"><code class="lang-text">Stamped verify pass for tree d922fdcc8ebb</code></pre>
 <p>Rules:</p>
 <ul><li>Evidence files must exist, or the stamp is refused. Relative paths are read from the folder you run the command in.</li><li>The stamp is for the tree id of the whole working tree at that moment.</li><li>For each kind, the latest stamp for a tree wins. A later <code>fail</code> stamp cancels an earlier <code>pass</code>.</li></ul>
 <p><strong>At commit time</strong> the gate finds the method for the exact tree being committed:</p>
@@ -254,12 +254,20 @@ vlite stamp verify --result pass --evidence test-run.log --note "unit and e2e te
 <p>The gate then adds a <strong>trailer</strong> (a <code>Key: value</code> line at the end of the commit message). Other trailers stay. An old <code>Verified-By</code> line is replaced.</p>
 <p>Real output (commit id shortened, date line removed):</p>
 <pre tabindex="0"><code class="lang-text">$ git log -1
-commit 709b7cf14af4
+commit 15c9cc06f92b
 Author: Demo &lt;demo@example.com&gt;
 
     feat: add count()
 
     Verified-By: verify</code></pre>
+<p>A passing Stop hook on the same files also counts. Real output after the Stop hook passed and the agent committed without a stamp:</p>
+<pre tabindex="0"><code class="lang-text">$ git log -1
+commit cf9307b3e6df
+Author: Demo &lt;demo@example.com&gt;
+
+    feat: add sum()
+
+    Verified-By: stop-check</code></pre>
 <p><strong>Why a stamp might not count.</strong> The stamp is for the working tree. The commit is for the staged files. They must be the same. If you leave a file unstaged or an untracked file out of the commit, the trees differ and the method is <code>none</code>. Stage everything (<code>git add -A</code>) before you stamp and before you commit. Keep evidence files in a folder that <code>.gitignore</code> ignores.</p>
 <p><strong>A stamp shows that a step ran. It is not proof.</strong> Anyone can write one by hand. It is a speed bump that makes skipping a visible choice.</p>
 <h2 id="8-skip-the-gate-on-purpose-verify-skip">8. Skip the gate on purpose: Verify-Skip</h2>
@@ -302,9 +310,9 @@ A stamp only counts for the exact staged tree. Stage everything first (git add -
 command: (built-in)
 exit code 1
 last lines of output:
-tests/price.test.js:5 [skip] test.skip('adds price times quantity', () =&gt; {
-  -&gt; Remove the skip or xfail. Fix the test or the code instead.
-tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () =&gt; {
+tests/price.test.js:4 [skip] test.skip('adds price times quantity', () =&gt; {
+  -&gt; Remove the skip, xfail or .only. Fix the test or the code instead.
+tests/price.test.js:7 (old line) [removed-test] test('rounds to cents', () =&gt; {
   -&gt; Test "rounds to cents" was removed. Restore it, or add a line to TEST-REMOVALS.md with its name and why it was removed.</code></pre>
 <p>In that run the test suite itself passed, because the failing test was skipped. The tamper check is what caught it.</p>
 <p><strong>Removing a test on purpose.</strong> Add a line to the removals log (<code>TEST-REMOVALS.md</code> by default) in the same change. The line must contain the test's name:</p>
@@ -315,8 +323,9 @@ tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () =&gt;
 <pre tabindex="0"><code class="lang-sh">vlite gate report --days 7</code></pre>
 <p>Real output from a test repo in <code>observe</code> mode:</p>
 <pre tabindex="0"><code class="lang-text">VerdictLite gate report, last 7 days (mode now: observe)
-Commits judged: 4
+Commits judged: 5
   verify: 1
+  stop-check: 1
   docs: 1
   none: 1
   skipped: 1
@@ -324,12 +333,12 @@ Would have been blocked (observe): 1
 Blocked (enforce): 0
 Let through after two blocks (escape): 0
 Overrides (Verify-Skip): 1
-  2026-11-18 18:13  generated file, checked by hand</code></pre>
+  2026-11-19 04:51  generated file, checked by hand</code></pre>
 <ul><li><strong>Commits judged:</strong> commits that went through, with a count per method.</li><li><strong>Would have been blocked:</strong> commits with method <code>none</code> in <code>observe</code> mode.</li><li><strong>Blocked:</strong> commit attempts stopped in <code>enforce</code> mode.</li><li><strong>Escape:</strong> commits let through after two blocks.</li><li><strong>Overrides:</strong> <code>Verify-Skip</code> commits, with time (UTC) and reason.</li></ul>
 <p><code>--days</code> defaults to 7.</p>
 <h2 id="13-where-state-lives">13. Where state lives</h2>
 <p>VerdictLite keeps nothing in your repo. Its state is in <code>~/.verdictlite/</code>. Set the <code>VLITE_HOME</code> environment variable to use another folder.</p>
-<p>Each repo gets a folder named after the repo folder plus a short hash of its git folder, for example <code>~/.verdictlite/shop-ea1973230c/</code>. All worktrees of one repo share it.</p>
+<p>Each repo gets a folder named after the repo folder plus a short hash of its git folder, for example <code>~/.verdictlite/shop-1fc1e50e6f/</code>. All worktrees of one repo share it.</p>
 <div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">File</th><th scope="col">What it holds</th></tr></thead><tbody><tr><td><code class="nw">state.json</code></td><td>The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD&#39;s history), round counters, pending gate records, recent blocks.</td></tr><tr><td><code class="nw">stop.jsonl</code></td><td>One line per stop check: pass, block, handoff or error.</td></tr><tr><td><code class="nw">stamps.jsonl</code></td><td>One line per stamp.</td></tr><tr><td><code class="nw">gate.jsonl</code></td><td>One line per gate decision.</td></tr><tr><td><code class="nw">handoffs/</code></td><td>Full output of each failing stop-check round.</td></tr><tr><td><code>reviews/&lt;branch&gt;/&lt;n&gt;.json</code></td><td>Each review round.</td></tr></tbody></table></div>
 <p>The <code>.jsonl</code> files are append-only logs, one JSON object per line, with ISO times. You can delete the folder to reset VerdictLite for a repo.</p>
 <h2 id="14-troubleshooting">14. Troubleshooting</h2>
