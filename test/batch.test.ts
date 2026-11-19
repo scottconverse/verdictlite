@@ -263,7 +263,7 @@ describe('tamper additions (fix 10)', () => {
     expect(kinds([add('tests/test_x.py', line)])).toContain('skip');
   });
   it('does not flag words that only contain fit(', () => {
-    expect(kinds([add('tests/test_x.py', 'benefit(1)', 'const profit = 1')])).toEqual([]);
+    expect(kinds([add('tests/test_x.py', 'benefit(1)', 'const profit = 1', 'model.fit(x, y)')])).toEqual([]);
   });
   it('matches the removal log by whole word', () => {
     const removed: FileDiff = { path: 'tests/test_x.py', added: [], removed: [{ line: 1, text: 'def test_a():' }] };

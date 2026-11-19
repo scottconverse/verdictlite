@@ -68,7 +68,7 @@ function cleanPath(p: string, prefix: string): string {
 }
 
 const SKIP =
-  /pytest\.mark\.(?:skip|xfail)|pytest\.(?:skip|xfail|importorskip)\(|\.skipTest\(|\.skipIf\(|\b(?:it|test|describe)\.only\b|\bf(?:it|describe)\(|@unittest\.(?:skip|expectedFailure)|\bxfail\b|\.skip\(|\b(?:it|test|describe)\.skip\b|\bx(?:it|describe|test)\(|\btest\.fixme\b|\.fixme\(/;
+  /pytest\.mark\.(?:skip|xfail)|pytest\.(?:skip|xfail|importorskip)\(|\.skipTest\(|\.skipIf\(|\b(?:it|test|describe)\.only\b|(?<![.\w])f(?:it|describe)\(|@unittest\.(?:skip|expectedFailure)|\bxfail\b|\.skip\(|\b(?:it|test|describe)\.skip\b|\bx(?:it|describe|test)\(|\btest\.fixme\b|\.fixme\(/;
 const SLEEP =
   /\btime\.sleep\(|\basyncio\.sleep\(|\bwaitForTimeout\(|new Promise[^\n]*setTimeout|await\s+(?:\w+\.)?setTimeout\(|setTimeout\(\s*(?:r|res|resolve|done|ok)\s*[,)]/;
 const RETRY_MARK = /@flaky\b|pytest\.mark\.flaky|--reruns\b|\.retries\(\s*[1-9]|jest\.retryTimes\(/;
