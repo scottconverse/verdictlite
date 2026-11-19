@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.6. Early stage. See [Status](#status).
+- Version: 0.1.7. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -72,6 +72,43 @@ Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.
 
 ## Install
 
+### Windows: one click
+
+1. Open the [latest release](https://github.com/scottconverse/verdictlite/releases/latest).
+2. Download `install-verdictlite.cmd` and double-click it.
+
+Or run this one line in PowerShell:
+
+```powershell
+irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex
+```
+
+The installer needs no admin rights. It does these things:
+
+1. Checks for Node.js 20 or newer. If it is missing, it installs Node.js with
+   `winget` for your user only. With no `winget`, it stops and tells you to get
+   Node.js from <https://nodejs.org/>.
+2. Downloads `verdictlite.zip` from the release and checks its SHA-256. If the
+   checksum is wrong, it stops and changes nothing.
+3. Puts the files in `%LOCALAPPDATA%\VerdictLite\app`. The folder is always the
+   same, because the git hooks keep its path.
+4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
+   to your user PATH.
+5. Runs `vlite --help` and prints the installed version.
+
+Open a new terminal after it finishes. Then run `vlite --help`.
+
+**To update:** run the installer again. It replaces the files in the same
+folder, so the paths in your git hooks stay valid.
+
+**To uninstall:** in each guarded repo, run `vlite install --uninstall` to
+remove its hooks. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
+remove `%LOCALAPPDATA%\VerdictLite\bin` from your user PATH (Windows Settings,
+search for "environment variables", then "Edit environment variables for your
+account").
+
+### From source (any OS)
+
 You need git, [Node.js](https://nodejs.org/) 20 or newer, and
 [pnpm](https://pnpm.io/installation). VerdictLite has no runtime dependencies.
 It is **not on npm**. Install it from this repo.
@@ -92,7 +129,7 @@ npm link
 You can skip `npm link` and call `node /path/to/verdictlite/dist/cli.js`
 instead. The git hooks do not need `vlite` on PATH.
 
-To update: `git pull`, then `pnpm install` and `pnpm build`.
+To update from source: `git pull`, then `pnpm install` and `pnpm build`.
 
 ## Set up a repo, step by step
 
@@ -468,7 +505,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.6.
+  another name, such as `master`, is not searched in 0.1.7.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -476,14 +513,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.6 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.7 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.6 is the sixth fix to the first release (0.1.0), built on 2026-11-18. It is being set
+Early. Version 0.1.7 is the seventh fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 160 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 162 automated tests (2 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.6. This manual is also on the web at
+Version 0.1.7. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -63,6 +63,43 @@ Two words you will see a lot:
 Install it once per machine, in its own folder. Keep it **outside** the repos
 it checks. The tool lives outside the repo, so a change cannot edit the tool itself. `vlite.json` is read from the base branch, but the commands it runs (package.json scripts, pyproject, ruff, mypy and eslint configs) come from the working tree, so a change can still edit what those commands do.
 
+### Windows: one click
+
+1. Open the [latest release](https://github.com/scottconverse/verdictlite/releases/latest).
+2. Download `install-verdictlite.cmd` and double-click it.
+
+Or run this one line in PowerShell:
+
+```powershell
+irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex
+```
+
+The installer needs no admin rights. It does these things:
+
+1. Checks for Node.js 20 or newer. If it is missing, it installs Node.js with
+   `winget` for your user only. With no `winget`, it stops and tells you to get
+   Node.js from <https://nodejs.org/>.
+2. Downloads `verdictlite.zip` from the release and checks its SHA-256. If the
+   checksum is wrong, it stops and changes nothing.
+3. Puts the files in `%LOCALAPPDATA%\VerdictLite\app`. The folder is always the
+   same, because the git hooks keep its path.
+4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
+   to your user PATH.
+5. Runs `vlite --help` and prints the installed version.
+
+Open a new terminal after it finishes. Then run `vlite --help`.
+
+**To update:** run the installer again. It replaces the files in the same
+folder, so the paths in your git hooks stay valid.
+
+**To uninstall:** in each guarded repo, run `vlite install --uninstall` to
+remove its hooks. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
+remove `%LOCALAPPDATA%\VerdictLite\bin` from your user PATH (Windows Settings,
+search for "environment variables", then "Edit environment variables for your
+account").
+
+### From source (any OS)
+
 ```sh
 git clone https://github.com/scottconverse/verdictlite.git
 cd verdictlite
@@ -81,7 +118,7 @@ You can skip `npm link`. Then call the tool as `node /path/to/verdictlite/dist/c
 The git hooks do not need `vlite` on PATH. They call the exact `node` and
 `dist/cli.js` that ran `vlite install`.
 
-**To update:** `git pull`, then `pnpm install` and `pnpm build` again.
+**To update from source:** `git pull`, then `pnpm install` and `pnpm build` again.
 
 ## 3. Set up a repo
 
@@ -682,7 +719,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.6 will not
+default branch has another name, such as `master`, VerdictLite 0.1.7 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -695,7 +732,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.6 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.7 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -899,7 +936,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.6 is the sixth fix to the first release (0.1.0), built on 2026-11-18. It has 160
+Early. Version 0.1.7 is the seventh fix to the first release (0.1.0), built on 2026-11-18. It has 162
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
