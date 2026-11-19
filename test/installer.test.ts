@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -35,7 +35,8 @@ describe('install.ps1', () => {
     const ok = install(zip, dir);
     expect(ok.code, ok.out).toBe(0);
     const cmd = join(base, 'bin', 'vlite.cmd');
-    expect(readFileSync(cmd, 'utf8')).toContain(join(dir, 'dist', 'cli.js'));
+    // Long path on both sides: the temp folder can come as a short 8.3 name (RUNNER~1).
+    expect(readFileSync(cmd, 'utf8').toLowerCase()).toContain(realpathSync.native(join(dir, 'dist', 'cli.js')).toLowerCase());
     const help = runCmd(cmd);
     expect(help.code, help.out).toBe(0);
     expect(help.out.split(/\r?\n/)[0]).toContain('VerdictLite');
