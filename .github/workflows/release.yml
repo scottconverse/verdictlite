@@ -1,0 +1,96 @@
+name: release
+
+# Runs only when a release is published (never on push).
+on:
+  release:
+    types: [published]
+
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm pack:zip
+      - name: Attach the zip, its checksum and the installer to the release
+        run: gh release upload "$TAG" release/verdictlite.zip release/verdictlite.zip.sha256 install.ps1 install-verdictlite.cmd --clobber
+
+  smoke:
+    needs: assets
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Install from the release assets (real download)
+        run: |
+          $ver = $env:TAG.TrimStart('v')
+          $base = Join-Path $env:RUNNER_TEMP 'vl-smoke'
+          & ./install.ps1 -Version $ver -InstallDir (Join-Path $base 'app') -NoPath
+          if (-not $?) { exit 1 }
+          "VLITE_CMD=$(Join-Path $base 'bin\vlite.cmd')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: vlite --help
+        run: |
+          $first = & $env:VLITE_CMD --help | Select-Object -First 1
+          Write-Host $first
+          if ($first -notmatch 'VerdictLite') { exit 1 }
+      - name: vlite install in a fresh repo
+        run: |
+          $repo = Join-Path $env:RUNNER_TEMP 'vl-repo'
+          New-Item -ItemType Directory $repo | Out-Null
+          Set-Location $repo
+          git init -q
+          & $env:VLITE_CMD install
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (-not ((Get-Content -Raw .git/hooks/pre-commit) -match 'vlite-hook')) { Write-Error 'pre-commit hook has no vlite-hook mark'; exit 1 }
+
+  double-click:
+    # The file a person downloads and double-clicks, run on a clean machine with the default folders.
+    needs: assets
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download install-verdictlite.cmd from the release and run it
+        shell: cmd
+        run: |
+          gh release download %TAG% --repo ${{ github.repository }} --pattern install-verdictlite.cmd --dir %RUNNER_TEMP%
+          echo.| call "%RUNNER_TEMP%\install-verdictlite.cmd"
+      - name: vlite works from the default folder
+        shell: pwsh
+        run: |
+          $cmd = Join-Path $env:LOCALAPPDATA 'VerdictLite\bin\vlite.cmd'
+          $first = & $cmd --help | Select-Object -First 1
+          Write-Host $first
+          if ($first -notmatch 'VerdictLite') { exit 1 }
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -notcontains (Split-Path $cmd)) { Write-Error 'bin folder is not on the user PATH'; exit 1 }
+          $ver = (Get-Content -Raw (Join-Path $env:LOCALAPPDATA 'VerdictLite\app\package.json') | ConvertFrom-Json).version
+          if ("v$ver" -ne $env:TAG) { Write-Error "installed $ver, release is $env:TAG"; exit 1 }
