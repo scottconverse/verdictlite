@@ -67,3 +67,30 @@ jobs:
           & $env:VLITE_CMD install
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if (-not ((Get-Content -Raw .git/hooks/pre-commit) -match 'vlite-hook')) { Write-Error 'pre-commit hook has no vlite-hook mark'; exit 1 }
+
+  double-click:
+    # The file a person downloads and double-clicks, run on a clean machine with the default folders.
+    needs: assets
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download install-verdictlite.cmd from the release and run it
+        shell: cmd
+        run: |
+          gh release download %TAG% --repo ${{ github.repository }} --pattern install-verdictlite.cmd --dir %RUNNER_TEMP%
+          echo.| call "%RUNNER_TEMP%\install-verdictlite.cmd"
+      - name: vlite works from the default folder
+        shell: pwsh
+        run: |
+          $cmd = Join-Path $env:LOCALAPPDATA 'VerdictLite\bin\vlite.cmd'
+          $first = & $cmd --help | Select-Object -First 1
+          Write-Host $first
+          if ($first -notmatch 'VerdictLite') { exit 1 }
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -notcontains (Split-Path $cmd)) { Write-Error 'bin folder is not on the user PATH'; exit 1 }
+          $ver = (Get-Content -Raw (Join-Path $env:LOCALAPPDATA 'VerdictLite\app\package.json') | ConvertFrom-Json).version
+          if ("v$ver" -ne $env:TAG) { Write-Error "installed $ver, release is $env:TAG"; exit 1 }
