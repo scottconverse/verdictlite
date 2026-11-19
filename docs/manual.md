@@ -320,10 +320,10 @@ of the same files shows `Verified-By: stop-check`. A pass where no check ran
 ## 5. Read a block message
 
 When a check fails, the agent gets a message like this one. This is real output
-from a test repo. The test runner's output is shortened here.
+from a test repo. The test runner's output and the paths are shortened here.
 
 ```text
-VerdictLite: checks failed on this change.
+VerdictLite: checks failed on this change (repo .../shop).
 
 [app/tests] failed
 command: node --test
@@ -336,12 +336,12 @@ not ok 1 - adds price times quantity
   error: |-
     Expected values to be strictly equal:
 
-    11 !== 14
+    9 !== 14
   ...
 # pass 1
 # fail 1
 
-Full output: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-44-751Z-round1.txt
+Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-round1.txt
 
 Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.
 ```
@@ -373,7 +373,7 @@ VerdictLite counts rounds.
   does not block.** It ends the session and asks for a person:
 
 ```text
-VerdictLite: app/tests still fails after 3 rounds. A person must look. Last failure: exit code 1. Handoff: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-49-327Z-round3.txt
+VerdictLite: app/tests still fails after 3 rounds. A person must look. Last failure: exit code 1. Handoff: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-47-492Z-round3.txt
 ```
 
 Technically, this is `{"continue": false, "stopReason": "..."}`. Claude Code
@@ -399,7 +399,7 @@ vlite stamp verify --result pass --evidence test-run.log --note "unit and e2e te
 ```
 
 ```text
-Stamped verify pass for tree b37dc8b45064
+Stamped verify pass for tree d922fdcc8ebb
 ```
 
 Rules:
@@ -429,12 +429,25 @@ Real output (commit id shortened, date line removed):
 
 ```text
 $ git log -1
-commit 709b7cf14af4
+commit 15c9cc06f92b
 Author: Demo <demo@example.com>
 
     feat: add count()
 
     Verified-By: verify
+```
+
+A passing Stop hook on the same files also counts. Real output after the Stop
+hook passed and the agent committed without a stamp:
+
+```text
+$ git log -1
+commit cf9307b3e6df
+Author: Demo <demo@example.com>
+
+    feat: add sum()
+
+    Verified-By: stop-check
 ```
 
 **Why a stamp might not count.** The stamp is for the working tree. The commit
@@ -571,9 +584,9 @@ Real output when an agent skipped one test and deleted another:
 command: (built-in)
 exit code 1
 last lines of output:
-tests/price.test.js:5 [skip] test.skip('adds price times quantity', () => {
-  -> Remove the skip or xfail. Fix the test or the code instead.
-tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () => {
+tests/price.test.js:4 [skip] test.skip('adds price times quantity', () => {
+  -> Remove the skip, xfail or .only. Fix the test or the code instead.
+tests/price.test.js:7 (old line) [removed-test] test('rounds to cents', () => {
   -> Test "rounds to cents" was removed. Restore it, or add a line to TEST-REMOVALS.md with its name and why it was removed.
 ```
 
@@ -606,8 +619,9 @@ Real output from a test repo in `observe` mode:
 
 ```text
 VerdictLite gate report, last 7 days (mode now: observe)
-Commits judged: 4
+Commits judged: 5
   verify: 1
+  stop-check: 1
   docs: 1
   none: 1
   skipped: 1
@@ -615,7 +629,7 @@ Would have been blocked (observe): 1
 Blocked (enforce): 0
 Let through after two blocks (escape): 0
 Overrides (Verify-Skip): 1
-  2026-11-18 18:13  generated file, checked by hand
+  2026-11-19 04:51  generated file, checked by hand
 ```
 
 - **Commits judged:** commits that went through, with a count per method.
@@ -632,7 +646,7 @@ VerdictLite keeps nothing in your repo. Its state is in `~/.verdictlite/`. Set
 the `VLITE_HOME` environment variable to use another folder.
 
 Each repo gets a folder named after the repo folder plus a short hash of its
-git folder, for example `~/.verdictlite/shop-ea1973230c/`. All worktrees of one
+git folder, for example `~/.verdictlite/shop-1fc1e50e6f/`. All worktrees of one
 repo share it.
 
 | File | What it holds |

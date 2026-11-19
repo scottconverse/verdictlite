@@ -51,10 +51,10 @@ Two parts, two scopes:
 - **The commit gate** is plain git hooks. It works with any agent and with
   people.
 
-Here is real output when a test fails (test output shortened):
+Here is real output when a test fails (test output and paths shortened):
 
 ```text
-VerdictLite: checks failed on this change.
+VerdictLite: checks failed on this change (repo .../shop).
 
 [app/tests] failed
 command: node --test
@@ -62,10 +62,10 @@ exit code 1
 last lines of output:
 not ok 1 - adds price times quantity
   ...
-    11 !== 14
+    9 !== 14
   ...
 
-Full output: ~/.verdictlite/shop-ea1973230c/handoffs/2026-11-18T18-13-44-751Z-round1.txt
+Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-round1.txt
 
 Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.
 ```
@@ -254,7 +254,7 @@ vlite stamp verify --result pass --evidence test-run.log --note "unit and e2e te
 ```
 
 ```text
-Stamped verify pass for tree b37dc8b45064
+Stamped verify pass for tree d922fdcc8ebb
 ```
 
 ### `vlite gate <pre-commit | commit-msg FILE | report [--days N]>`
@@ -299,8 +299,9 @@ vlite gate report --days 7
 
 ```text
 VerdictLite gate report, last 7 days (mode now: observe)
-Commits judged: 4
+Commits judged: 5
   verify: 1
+  stop-check: 1
   docs: 1
   none: 1
   skipped: 1
@@ -308,7 +309,7 @@ Would have been blocked (observe): 1
 Blocked (enforce): 0
 Let through after two blocks (escape): 0
 Overrides (Verify-Skip): 1
-  2026-11-18 18:13  generated file, checked by hand
+  2026-11-19 04:51  generated file, checked by hand
 ```
 
 ### `vlite review [--base REF] [--round-note TEXT]`
@@ -354,9 +355,9 @@ Real output:
 command: (built-in)
 exit code 1
 last lines of output:
-tests/price.test.js:5 [skip] test.skip('adds price times quantity', () => {
-  -> Remove the skip or xfail. Fix the test or the code instead.
-tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () => {
+tests/price.test.js:4 [skip] test.skip('adds price times quantity', () => {
+  -> Remove the skip, xfail or .only. Fix the test or the code instead.
+tests/price.test.js:7 (old line) [removed-test] test('rounds to cents', () => {
   -> Test "rounds to cents" was removed. Restore it, or add a line to TEST-REMOVALS.md with its name and why it was removed.
 ```
 
