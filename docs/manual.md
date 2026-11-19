@@ -948,7 +948,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.9 is the ninth fix to the first release (0.1.0), built on 2026-11-19. It has 162
+Early. Version 0.1.9 is the ninth fix to the first release (0.1.0), built on 2026-11-19. It has 169
 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
