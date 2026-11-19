@@ -245,14 +245,45 @@ if (existsSync('pkg/' + name + '/FAIL')) { console.log('tests for ' + name + ' f
     expect(ranLog(r)).toEqual([]);
   });
 
-  it('fails a "too many parts" check instead of running past the cap', () => {
+  it('warns, and does not block, when a template matches too many modules and everything else passes', () => {
     const r = templated({ maxExpandedParts: 2 });
     for (const m of ['alpha', 'beta', 'gamma']) r.write(`pkg/${m}/new.py`, 'x\n');
-    const reason = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason']);
-    expect(reason).toContain('[mod:{name} (too many parts)] failed');
-    expect(reason).toContain('None of these parts ran: mod:alpha, mod:beta, mod:gamma');
-    expect(reason).toContain('Run the wider check by hand');
+    const out = r.vlite(['stop-check', '--session', 's']);
+    expect(out.code).toBe(0);
+    const json = lastJson(out.out);
+    expect(json['decision']).toBeUndefined();
+    const message = String(json['systemMessage']);
+    expect(message).toContain('3 modules changed for "mod:{name}" (limit 2)');
+    expect(message).toContain('mod:alpha, mod:beta, mod:gamma');
+    expect(message).toContain('Other checks passed');
     expect(ranLog(r)).toEqual([]);
+    expect(stopLog(r).at(-1)).toMatchObject({
+      result: 'pass',
+      skipped: { 'mod:{name}': 'too many modules (3, limit 2): mod:alpha, mod:beta, mod:gamma' },
+    });
+    expect(existsSync(join(stateFolder(r), 'stamps.jsonl'))).toBe(false);
+  });
+
+  it('blocks on another failing part, without listing too-many as a failure, and adds the note', () => {
+    const r = makeRepo(
+      { 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n', 'pkg/alpha/x.py': 'a\n', 'pkg/beta/y.py': 'b\n', 'pkg/gamma/z.py': 'c\n' },
+      baseConfig({
+        maxExpandedParts: 2,
+        parts: [
+          { name: 'app', paths: ['src/**'], checks: [{ name: 'check', run: 'node check.mjs', timeoutSec: 60 }] },
+          { name: 'mod:{name}', paths: ['pkg/{name}/**'], checks: [{ name: 'tests', run: 'node check.mjs', timeoutSec: 60 }] },
+        ],
+      }),
+    );
+    r.write('src/app.js', 'BAD\n');
+    for (const m of ['alpha', 'beta', 'gamma']) r.write(`pkg/${m}/new.py`, 'x\n');
+    const reason = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason']);
+    expect(reason).toContain('[app/check] failed');
+    expect(reason).not.toContain('too many parts');
+    expect(reason).not.toContain('[mod:{name}');
+    expect(reason).toContain('3 modules changed for "mod:{name}" (limit 2)');
+    expect(reason.trimEnd().endsWith('or raise maxExpandedParts on the base branch.')).toBe(true);
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'block', failing: ['app/check'] });
   });
 });
 

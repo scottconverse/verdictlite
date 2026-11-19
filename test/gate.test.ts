@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { baseConfig, CHECK_SCRIPT, makeRepo, type Repo } from './helpers.js';
@@ -162,8 +162,44 @@ describe('gate', () => {
     expect(out).toContain('skipped: 1');
     expect(out).toContain('docs: 1');
     expect(out).toContain('Would have been blocked (observe): 1');
+    expect(out).toContain('Checked after commit (same files passed later): 0');
     expect(out).toContain('Overrides (Verify-Skip): 1');
     expect(out).toContain('spike');
+  });
+});
+
+describe('report: checked after commit', () => {
+  const stopHook = (r: Repo): string => JSON.stringify({ session_id: 's1', cwd: r.dir, stop_hook_active: false });
+  const stampsFile = (r: Repo): string => {
+    const [name] = readdirSync(r.home);
+    return join(r.home, name ?? '', 'stamps.jsonl');
+  };
+  const count = (r: Repo): string => /Checked after commit.*: (\d+)/.exec(r.vlite(['gate', 'report', '--days', '1']).out)?.[1] ?? 'missing';
+
+  it('counts a none commit whose tree passed later, not one with no later pass', () => {
+    const r = setup('observe');
+    r.write('src/app.js', 'one\n');
+    commit(r, 'feat: one');
+    expect(trailer(r)).toBe('none');
+    r.write('src/app.js', 'two\n');
+    commit(r, 'feat: two');
+    expect(count(r)).toBe('0');
+    r.write('src/app.js', 'one\n'); // work tree is back to commit one's files
+    expect(r.vlite(['stop-check'], { input: stopHook(r) }).code).toBe(0);
+    expect(count(r)).toBe('1');
+  });
+
+  it('a later fail stamp for the same tree cancels the pass', () => {
+    const r = setup('observe');
+    r.write('src/app.js', 'one\n');
+    commit(r, 'feat: one');
+    r.write('src/app.js', 'one\n');
+    expect(r.vlite(['stop-check'], { input: stopHook(r) }).code).toBe(0);
+    const pass = JSON.parse(readFileSync(stampsFile(r), 'utf8').trim().split('\n').at(-1) ?? '{}') as Record<string, unknown>;
+    expect(count(r)).toBe('1');
+    const later = new Date(Date.now() + 1000).toISOString();
+    appendFileSync(stampsFile(r), `${JSON.stringify({ ...pass, time: later, result: 'fail' })}\n`);
+    expect(count(r)).toBe('0');
   });
 });
 

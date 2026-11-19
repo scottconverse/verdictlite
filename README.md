@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.5. Early stage. See [Status](#status).
+- Version: 0.1.6. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -306,6 +306,7 @@ Commits judged: 5
   none: 1
   skipped: 1
 Would have been blocked (observe): 1
+Checked after commit (same files passed later): 0
 Blocked (enforce): 0
 Let through after two blocks (escape): 0
 Overrides (Verify-Skip): 1
@@ -430,9 +431,9 @@ only the tests of the module that changed:
   `_`, `.` and `-`. Any other folder name does not match, and nothing runs
   for it.
 - **Limit.** If more than `maxExpandedParts` modules (default 12) changed for
-  one template, none of them run. A check named
-  `<template name> (too many parts)` fails and lists them. Run the wider check
-  by hand.
+  one template, none of them run. This is a warning, not a failure: the other
+  checks still run, and VerdictLite tells you which modules were not checked.
+  No stop-check stamp is written. Run the wider check by hand.
 
 The [manual](docs/manual.md#how-to-run-the-tests-of-the-module-that-changed)
 has the full rules.
@@ -467,7 +468,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.5.
+  another name, such as `master`, is not searched in 0.1.6.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -475,14 +476,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.5 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.6 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.5 is the fifth fix to the first release (0.1.0), built on 2026-11-18. It is being set
+Early. Version 0.1.6 is the sixth fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 157 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 160 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 
