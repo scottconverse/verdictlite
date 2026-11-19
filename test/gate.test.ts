@@ -194,6 +194,15 @@ describe('stop-check proof', () => {
     expect(trailer(r)).toBe('verify+stop-check');
   });
 
+  it('writes no stop-check stamp when no check ran', () => {
+    const r = setup('observe');
+    r.write('tools/run.sh', 'echo hi\n'); // no part covers tools/
+    const stop = r.vlite(['stop-check'], { input: stopHook(r) });
+    expect(stop.code, stop.err).toBe(0);
+    expect(commit(r, 'nothing ran').ok).toBe(true);
+    expect(trailer(r)).toBe('none');
+  });
+
   it('rejects vlite stamp stop-check typed by hand', () => {
     const r = setup('observe');
     r.write('src/app.js', 'x\n');

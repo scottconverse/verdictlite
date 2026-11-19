@@ -312,8 +312,10 @@ Here is one session from start to end.
    The gate adds a `Verified-By:` line to the commit message. See
    [section 7](#7-stamps-and-the-verified-by-trailer).
 
-A stop-check pass is not a stamp. It lets the agent stop. It does not mark the
-commit as verified. Only `vlite stamp` and a clean `vlite review` write stamps.
+A stop-check pass lets the agent stop. When at least one check ran and no part
+was skipped, it also writes a `stop-check` stamp for that exact tree, so a commit
+of the same files shows `Verified-By: stop-check`. A pass where no check ran
+(docs only, or files no part covers) writes no stamp. Only `vlite stamp` and a clean `vlite review` write stamps.
 
 ## 5. Read a block message
 
@@ -875,7 +877,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.5 is the third fix to the first release (0.1.0), built on 2026-11-18. It has 156
+Early. Version 0.1.5 is the fifth fix to the first release (0.1.0), built on 2026-11-18. It has 157
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

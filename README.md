@@ -236,8 +236,10 @@ failing check always blocks.
 vlite stop-check --session my-test   # run it by hand, without Claude Code
 ```
 
-A stop-check pass is not a stamp. It lets the agent stop. It does not mark the
-commit as verified.
+A stop-check pass lets the agent stop. When at least one check ran and no part
+was skipped, it also writes a `stop-check` stamp for that exact tree, so a commit
+of the same files shows `Verified-By: stop-check`. A pass where no check ran
+(docs only, or files no part covers) writes no stamp.
 
 If VerdictLite itself fails (a broken or mistyped `vlite.json`, a locked file), it still lets the agent stop, but it now says so: the hook prints a `systemMessage` that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in `vlite.json` are an error, so a typo such as `"part"` is caught.
 
@@ -476,10 +478,10 @@ Delete the folder to reset VerdictLite for a repo.
 
 ## Status
 
-Early. Version 0.1.5 is the third fix to the first release (0.1.0), built on 2026-11-18. It is being set
+Early. Version 0.1.5 is the fifth fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 156 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 157 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

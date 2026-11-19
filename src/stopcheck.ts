@@ -171,7 +171,10 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       for (const k of Object.keys(s.rounds)) if (k.startsWith(`${session}|`)) delete s.rounds[k];
     });
     ctx.log('stop', { ...base, result: 'pass', ...extra });
-    // A pass on this exact tree counts as proof at commit. A failed stamp write never turns a pass into an error.
+    // A pass on this exact tree counts as proof at commit, but only when a check really ran and no part was skipped.
+    // A failed stamp write never turns a pass into an error.
+    const e = extra as { ran?: string[]; skipped?: object };
+    if (!e.ran || e.ran.length === 0 || e.skipped) return;
     try {
       writeStamp(ctx, 'stop-check', 'pass', [], 'stop-check pass', tree);
     } catch (e) {
