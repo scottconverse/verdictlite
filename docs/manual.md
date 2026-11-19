@@ -937,6 +937,6 @@ team described in public.
 
 **What state is the project in?**
 Early. Version 0.1.7 is the seventh fix to the first release (0.1.0), built on 2026-11-18. It has 162
-automated tests that run on Ubuntu and Windows. It is being set up on its first
+automated tests (2 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
