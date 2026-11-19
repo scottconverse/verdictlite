@@ -118,7 +118,10 @@ try {
         Invoke-WebRequest -UseBasicParsing -Uri "$Base/verdictlite.zip.sha256" -OutFile $shaFile
     }
     $expected = ((Get-Content -Raw $shaFile).Trim() -split '\s+')[0].ToLowerInvariant()
-    $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
+    # .NET, not Get-FileHash: Windows PowerShell started from PowerShell 7 cannot load that module.
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($zip)
+    try { $actual = (-join ($sha.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') })) } finally { $stream.Dispose(); $sha.Dispose() }
     if ($expected -ne $actual) {
         throw "SHA-256 does not match. Expected $expected but the zip is $actual. Nothing was installed."
     }
@@ -130,7 +133,9 @@ try {
     $fresh = "$InstallDir.new"
     $old = "$InstallDir.old"
     foreach ($p in @($fresh, $old)) { if (Test-Path $p) { Remove-Item -Recurse -Force $p } }
-    Expand-Archive -Path $zip -DestinationPath $fresh -Force
+    # .NET, not Expand-Archive, for the same reason as the SHA-256 above.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($zip, $fresh)
     if (-not (Test-Path (Join-Path $fresh 'dist\cli.js'))) { throw 'The zip has no dist\cli.js. Nothing was installed.' }
     $hadOld = Test-Path $InstallDir
     if ($hadOld) { Move-Item -Path $InstallDir -Destination $old }
