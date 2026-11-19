@@ -83,6 +83,9 @@ export function parseConfig(text: string, where: string): Config {
   return cfg;
 }
 
+/** Top-level keys of vlite.json. "prChecks" is an old field that is ignored. */
+const TOP_KEYS = new Set(['version', 'base', 'docs', 'codeDespiteDocs', 'parts', 'maxExpandedParts', 'tests', 'maxRounds', 'gate', 'review', 'prChecks']);
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -109,8 +112,8 @@ function posNum(v: unknown, at: string, errors: string[], fallback: number): num
 
 let warnedPrChecks = false;
 
-/** A placeholder token such as {name} or {module}. */
-const TOKEN = /\{[^{}/]*\}/g;
+/** A placeholder token such as {name} or {module}. A group with a comma, like {ts,tsx}, is alternation, not a token. */
+const TOKEN = /\{[^{},/]*\}/g;
 
 /** Checks the {name} rules of one part. Returns true when the part is a template. */
 function placeholderRules(p: { name: string; paths: string[]; requires: string[]; cwd: string; checks: Check[] }, at: string, errors: string[]): boolean {
@@ -171,6 +174,9 @@ function validate(raw: unknown, errors: string[]): Config | null {
     return null;
   }
   if (raw['version'] !== 1) errors.push('"version" must be 1');
+  for (const key of Object.keys(raw)) {
+    if (!TOP_KEYS.has(key)) errors.push(`unknown top-level key "${key}" (a typo? allowed: ${[...TOP_KEYS].join(', ')})`);
+  }
   const partsRaw = raw['parts'] ?? [];
   const parts: Part[] = [];
   if (!Array.isArray(partsRaw)) errors.push('"parts" must be a list');

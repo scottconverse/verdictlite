@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.3. Early stage. See [Status](#status).
+- Version: 0.1.4. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -42,7 +42,7 @@ VerdictLite puts a simple check at each of those points:
 | A failing test gets skipped, slowed, retried or deleted. | A built-in test-tamper check looks at changed lines in test files. It flags added skips, fixed sleeps, retries and removed tests. |
 | The agent tries the same broken fix forever. | Failed rounds are counted. After three, the session ends and a person is asked to look. |
 | A commit gives no sign of how it was checked. | Git hooks add a `Verified-By:` line to every commit message. |
-| A change loosens the rules that judge it. | The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo. |
+| A change loosens the rules that judge it. | The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo. The commands the config runs (package.json scripts, pyproject, ruff, mypy, eslint configs) come from the working tree. |
 
 Two parts, two scopes:
 
@@ -77,7 +77,7 @@ You need git, [Node.js](https://nodejs.org/) 20 or newer, and
 It is **not on npm**. Install it from this repo.
 
 Install it once per machine, in a folder **outside** the repos it checks. That
-way a change in a repo cannot edit the tool that judges it.
+way a change in a repo cannot edit the tool that judges it. `vlite.json` is read from the base branch, but the commands it runs (package.json scripts, pyproject, ruff, mypy and eslint configs) come from the working tree, so a change can still edit what those commands do.
 
 ```sh
 git clone https://github.com/scottconverse/verdictlite.git
@@ -126,7 +126,7 @@ Do these steps in the repo you want to guard. The
 Give each rule a name, a trigger and what to check.
 
 **3. Merge both files to the base branch.** VerdictLite reads them from the
-base branch, so a feature branch cannot loosen its own checks. Until then it
+base branch, so a feature branch cannot loosen the config. (The commands it runs still come from the working tree.) Until then it
 uses the working-tree copy and prints:
 
 ```text
@@ -238,6 +238,8 @@ vlite stop-check --session my-test   # run it by hand, without Claude Code
 
 A stop-check pass is not a stamp. It lets the agent stop. It does not mark the
 commit as verified.
+
+If VerdictLite itself fails (a broken or mistyped `vlite.json`, a locked file), it still lets the agent stop, but it now says so: the hook prints a `systemMessage` that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in `vlite.json` are an error, so a typo such as `"part"` is caught.
 
 ### `vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]`
 
@@ -357,7 +359,7 @@ tests/price.test.js:9 (old line) [removed-test] test('rounds to cents', () => {
 
 ## Config reference: `vlite.json`
 
-Unknown keys are ignored. A bad value stops the command with a list of errors.
+Unknown top-level keys are an error that names the key. A bad value stops the command with a list of errors.
 An old `prChecks` field is ignored with a one-line warning.
 
 | Field | Type | Default | Meaning |
@@ -439,7 +441,7 @@ worktrees of one repo share the folder.
 
 | File | What it holds |
 |---|---|
-| `state.json` | Last passing tree per branch (per commit for a detached HEAD), round counters, pending gate records, recent blocks. |
+| `state.json` | Last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history), round counters, pending gate records, recent blocks. |
 | `stop.jsonl` | One line per stop check. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
@@ -461,7 +463,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.3.
+  another name, such as `master`, is not searched in 0.1.4.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -469,14 +471,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.3 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.4 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.3 is the second fix to the first release (0.1.0), built on 2026-11-18. It is being set
+Early. Version 0.1.4 is the second fix to the first release (0.1.0), built on 2026-11-18. It is being set
 up on its first real repo now. Expect changes.
 
-- 121 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
+- 153 automated tests. CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

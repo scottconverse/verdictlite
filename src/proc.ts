@@ -48,6 +48,10 @@ export function runShell(command: string, cwd: string, timeoutSec: number, input
       finish(127);
     });
     child.on('close', (code) => finish(timedOut ? null : code));
+    // A grandchild may keep the pipes open after the command exited; do not wait for it past a short grace period.
+    child.on('exit', (code) => {
+      setTimeout(() => finish(timedOut ? null : code), 2000).unref();
+    });
     child.stdin.end(input ?? '');
   });
 }

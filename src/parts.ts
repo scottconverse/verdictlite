@@ -1,5 +1,5 @@
 import type { Part } from './config.js';
-import { matchAny, PLACEHOLDER, templateToRegExp } from './glob.js';
+import { expandBraces, matchAny, PLACEHOLDER, templateToRegExp } from './glob.js';
 
 /** A bound {name} value goes into a shell command, so only plain names are allowed. */
 export const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
@@ -21,10 +21,12 @@ export function bindNames(part: Part, changed: readonly string[]): string[] {
   const names = new Set<string>();
   for (const pattern of part.paths) {
     if (!pattern.includes(PLACEHOLDER)) continue;
-    const re = templateToRegExp(pattern);
-    for (const file of changed) {
-      const value = re.exec(file.replace(/\\/g, '/'))?.[1];
-      if (value !== undefined && SAFE_NAME.test(value)) names.add(value);
+    for (const alt of expandBraces(pattern)) {
+      const re = templateToRegExp(alt);
+      for (const file of changed) {
+        const value = re.exec(file.replace(/\\/g, '/'))?.[1];
+        if (value !== undefined && SAFE_NAME.test(value)) names.add(value);
+      }
     }
   }
   return [...names].sort();

@@ -3,9 +3,18 @@ import { join } from 'node:path';
 import { allDocs, type Ctx } from './context.js';
 import { changedFiles, emptyTree, git, gitOut, headSha, indexTree } from './git.js';
 import { passedMethods } from './stamp.js';
-import { readJsonl, readState, writeState } from './state.js';
+import { readJsonl, readState, type State, updateState } from './state.js';
 
 const ESCAPE_WINDOW_MS = 30 * 60 * 1000;
+
+/** Saves a state change. A failure to save is reported on stderr and never changes the gate's decision. */
+function saveState(ctx: Ctx, mutate: (s: State) => void): void {
+  try {
+    updateState(ctx.stateDir, mutate);
+  } catch (e) {
+    process.stderr.write(`VerdictLite: could not save state (ignored): ${(e as Error).message}\n`);
+  }
+}
 
 /** How the staged tree was checked: verify, code-review, verify+code-review, docs, or none. */
 export function methodFor(ctx: Ctx, tree: string): string {
@@ -22,11 +31,11 @@ export function preCommit(ctx: Ctx): number {
   if (mode === 'off') return 0;
   const tree = indexTree(ctx.root);
   const method = methodFor(ctx, tree);
-  const state = readState(ctx.stateDir);
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  for (const [k, p] of Object.entries(state.pending)) if (Date.parse(p.time) < dayAgo) delete state.pending[k];
-  state.pending[tree] = { method, time: new Date().toISOString() };
-  writeState(ctx.stateDir, state);
+  saveState(ctx, (state) => {
+    for (const [k, p] of Object.entries(state.pending)) if (Date.parse(p.time) < dayAgo) delete state.pending[k];
+    state.pending[tree] = { method, time: new Date().toISOString() };
+  });
   if (mode === 'observe') ctx.log('gate', { hook: 'pre-commit', mode, tree, method, wouldBlock: method === 'none' });
   return 0;
 }
@@ -44,14 +53,27 @@ export function commitMsg(ctx: Ctx, file: string): number {
 
   let escape = false;
   if (mode === 'enforce' && method === 'none') {
-    const now = Date.now();
-    const recent = state.blocks.filter((t) => now - Date.parse(t) < ESCAPE_WINDOW_MS);
-    if (recent.length >= 2) {
-      escape = true; // two blocks in 30 minutes: let the third through and say so in the log
-      state.blocks = [];
-    } else {
-      state.blocks = [...recent, new Date(now).toISOString()];
-      writeState(ctx.stateDir, state);
+    let blocked = false;
+    const decide = (s: State): void => {
+      escape = false;
+      blocked = false;
+      const now = Date.now();
+      const recent = s.blocks.filter((t) => now - Date.parse(t) < ESCAPE_WINDOW_MS);
+      if (recent.length >= 2) {
+        escape = true; // two blocks in 30 minutes: let the third through and say so in the log
+        s.blocks = [];
+      } else {
+        s.blocks = [...recent, new Date(now).toISOString()];
+        blocked = true;
+      }
+    };
+    try {
+      updateState(ctx.stateDir, decide);
+    } catch (e) {
+      process.stderr.write(`VerdictLite: could not save state (ignored): ${(e as Error).message}\n`);
+      decide(state); // the decision still stands when the save fails
+    }
+    if (blocked) {
       ctx.log('gate', { ...record, blocked: true });
       process.stderr.write(blockMessage());
       return 1;
@@ -59,8 +81,9 @@ export function commitMsg(ctx: Ctx, file: string): number {
   }
 
   gitOut(ctx.root, ['interpret-trailers', '--in-place', '--if-exists', 'replace', '--trailer', `Verified-By: ${method}`, file]);
-  delete state.pending[tree];
-  writeState(ctx.stateDir, state);
+  saveState(ctx, (s) => {
+    delete s.pending[tree];
+  });
   ctx.log('gate', { ...record, wouldBlock: mode === 'observe' && method === 'none', ...(escape ? { escape: true } : {}) });
   return 0;
 }
