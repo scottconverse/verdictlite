@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { allDocs, type Ctx } from './context.js';
 import { changedFiles, emptyTree, git, gitOut, headSha, indexTree } from './git.js';
-import { passedMethods } from './stamp.js';
+import { passedMethods, type StampRecord } from './stamp.js';
 import { readJsonl, readState, type State, updateState } from './state.js';
 
 const ESCAPE_WINDOW_MS = 30 * 60 * 1000;
@@ -105,10 +105,19 @@ interface GateRecord {
   time: string;
   hook: string;
   method: string;
+  tree?: string;
   wouldBlock?: boolean;
   blocked?: boolean;
   escape?: boolean;
   skipReason?: string;
+}
+
+/** Commits stamped "none" whose exact tree got a passing stamp (any method) after the commit. The latest stamp per tree and method counts. */
+function checkedAfterCommit(ctx: Ctx, commits: GateRecord[]): number {
+  const latest = new Map<string, StampRecord>();
+  for (const s of readJsonl<StampRecord>(join(ctx.stateDir, 'stamps.jsonl'))) latest.set(`${s.tree}|${s.method}`, s);
+  const passes = [...latest.values()].filter((s) => s.result === 'pass');
+  return commits.filter((c) => c.method === 'none' && c.tree !== undefined && passes.some((s) => s.tree === c.tree && Date.parse(s.time) > Date.parse(c.time))).length;
 }
 
 export function report(ctx: Ctx, days: number): string {
@@ -120,6 +129,7 @@ export function report(ctx: Ctx, days: number): string {
   const lines = [`VerdictLite gate report, last ${days} days (mode now: ${ctx.config.gate.mode})`, `Commits judged: ${commits.length}`];
   for (const [m, n] of [...counts].sort((a, b) => b[1] - a[1])) lines.push(`  ${m}: ${n}`);
   lines.push(`Would have been blocked (observe): ${commits.filter((r) => r.wouldBlock).length}`);
+  lines.push(`Checked after commit (same files passed later): ${checkedAfterCommit(ctx, commits)}`);
   lines.push(`Blocked (enforce): ${recs.filter((r) => r.blocked).length}`);
   lines.push(`Let through after two blocks (escape): ${commits.filter((r) => r.escape).length}`);
   const skips = commits.filter((r) => r.skipReason);

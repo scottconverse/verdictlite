@@ -198,14 +198,10 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const ran: string[] = [];
   const skipped: Record<string, string> = {};
   const plan = planParts(config.parts, changed, config.maxExpandedParts);
-  for (const t of plan.tooMany) {
-    const output = [
-      `${t.names.length} modules changed for the template part "${t.template}"; the limit is ${config.maxExpandedParts} (maxExpandedParts).`,
-      `None of these parts ran: ${t.names.join(', ')}`,
-      'Run the wider check by hand, or raise maxExpandedParts on the base branch.',
-    ].join('\n');
-    failures.push({ check: `${t.template} (too many parts)`, command: '(built-in)', code: 1, timedOut: false, output });
-  }
+  // Too many modules for a template is not a failure (the agent cannot fix it): its parts do not run, and the person is told.
+  const tooManyMessage = (t: { template: string; names: string[] }, otherPassed: boolean): string =>
+    `VerdictLite: ${t.names.length} modules changed for "${t.template}" (limit ${config.maxExpandedParts}), so their module checks did not run: ${t.names.join(', ')}. ${otherPassed ? 'Other checks passed. ' : ''}Run the wider tests by hand, or raise maxExpandedParts on the base branch.`;
+  for (const t of plan.tooMany) skipped[t.template] = `too many modules (${t.names.length}, limit ${config.maxExpandedParts}): ${t.names.join(', ')}`;
   for (const part of plan.parts) {
     const missing = part.requires.filter((p) => !existsSync(resolve(root, p)));
     if (missing.length > 0) {
@@ -225,6 +221,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const extra = Object.keys(skipped).length > 0 ? { skipped } : {};
   if (failures.length === 0) {
     pass({ ran, ...extra });
+    if (plan.tooMany.length > 0) return { kind: 'warn', message: plan.tooMany.map((t) => tooManyMessage(t, true)).join('\n') };
     return { kind: 'pass' };
   }
 
@@ -246,6 +243,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       ...failures.map(describe),
       `Full output: ${logPath}`,
       `Round ${round} of ${config.maxRounds}. Fix the cause. Do not skip, sleep or rerun to pass.`,
+      ...plan.tooMany.map((t) => tooManyMessage(t, false)),
     ].join('\n\n');
     ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, ...extra, log: logPath });
     return { kind: 'block', reason };

@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.5. This manual is also on the web at
+Version 0.1.6. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -626,6 +626,7 @@ Commits judged: 5
   none: 1
   skipped: 1
 Would have been blocked (observe): 1
+Checked after commit (same files passed later): 0
 Blocked (enforce): 0
 Let through after two blocks (escape): 0
 Overrides (Verify-Skip): 1
@@ -634,6 +635,10 @@ Overrides (Verify-Skip): 1
 
 - **Commits judged:** commits that went through, with a count per method.
 - **Would have been blocked:** commits with method `none` in `observe` mode.
+- **Checked after commit:** commits stamped `none` whose exact files passed a
+  check later (for example, the stop check ran after the agent committed).
+  The method in the commit stays `none`. This line only tells you that the
+  work was checked.
 - **Blocked:** commit attempts stopped in `enforce` mode.
 - **Escape:** commits let through after two blocks.
 - **Overrides:** `Verify-Skip` commits, with time (UTC) and reason.
@@ -677,7 +682,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.5 will not
+default branch has another name, such as `master`, VerdictLite 0.1.6 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -690,7 +695,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.5 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.6 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -812,9 +817,12 @@ for each module that changed. `{name}` stands for one folder name.
 - Each module runs once, even when files in several of its paths changed.
   Modules run in name order.
 - **Limit.** If more than `maxExpandedParts` modules (default 12) changed for
-  one template, none of them run. A check named
-  `<template name> (too many parts)` fails instead. Its message lists the
-  parts. Run the wider check by hand, or raise the limit on the base branch.
+  one template, none of them run. This is a warning, not a failure. The other
+  checks still run. If they pass, the stop is allowed and a message lists the
+  modules that were not checked. If another check fails, the block message
+  ends with the same note. No stop-check stamp is written, because not
+  everything was checked. Run the wider check by hand, or raise the limit on
+  the base branch.
 
 ### How to: run the tests of the module that changed
 
@@ -891,7 +899,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.5 is the fifth fix to the first release (0.1.0), built on 2026-11-18. It has 157
+Early. Version 0.1.6 is the sixth fix to the first release (0.1.0), built on 2026-11-18. It has 160
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
