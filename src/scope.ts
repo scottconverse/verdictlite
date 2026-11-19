@@ -25,6 +25,13 @@ function isPrompt(e: Entry): boolean {
   return Array.isArray(c) && c.some((i: Item) => i?.type === 'text') && !c.some((i: Item) => i?.type === 'tool_result');
 }
 
+/** Git Bash style "/c/dev/x" is "C:/dev/x" on Windows; node would read it as a path on the current drive. */
+function winPath(p: string): string {
+  if (process.platform !== 'win32') return p;
+  const m = /^\/([A-Za-z])(?:\/(.*))?$/.exec(p);
+  return m ? `${(m[1] as string).toUpperCase()}:/${m[2] ?? ''}` : p;
+}
+
 /** Files the session edited with its edit tools since the last prompt the person typed. */
 export function editedFiles(transcript: string, cwd: string): string[] {
   if (!existsSync(transcript)) return [];
@@ -42,7 +49,9 @@ export function editedFiles(transcript: string, cwd: string): string[] {
     for (const i of e.message.content as Item[]) {
       if (i?.type !== 'tool_use' || !EDIT_TOOLS.has(i.name ?? '')) continue;
       const p = i.input?.file_path ?? i.input?.notebook_path;
-      if (typeof p === 'string' && p) out.add(isAbsolute(p) ? p : resolve(cwd, p));
+      if (typeof p !== 'string' || !p) continue;
+      const q = winPath(p);
+      out.add(isAbsolute(q) ? q : resolve(cwd, q));
     }
   }
   return [...out];
@@ -50,7 +59,18 @@ export function editedFiles(transcript: string, cwd: string): string[] {
 
 /** Git root of a file, found from its nearest folder that exists (the file may have been deleted). */
 export function rootOf(file: string): string | null {
-  let dir = dirname(file);
+  const dir0 = dirname(file);
+  const key = process.platform === 'win32' ? dir0.toLowerCase() : dir0;
+  if (rootCache.has(key)) return rootCache.get(key) ?? null;
+  const root = findRoot(dir0);
+  rootCache.set(key, root);
+  return root;
+}
+
+const rootCache = new Map<string, string | null>();
+
+function findRoot(start: string): string | null {
+  let dir = start;
   for (let n = 0; n < 64 && !existsSync(dir); n++) {
     const up = dirname(dir);
     if (up === dir) return null;

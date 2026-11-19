@@ -18,10 +18,50 @@ export function templateToRegExp(pattern: string): RegExp {
   return compile(pattern, true);
 }
 
+/**
+ * Expands brace alternation: "**\/*.{spec,test}.ts" becomes two patterns. Only a group with a comma counts;
+ * a bare "{word}" (such as {name}) is left alone. Nested groups are expanded too.
+ */
+export function expandBraces(pattern: string): string[] {
+  for (let open = pattern.indexOf('{'); open !== -1; open = pattern.indexOf('{', open + 1)) {
+    let depth = 0;
+    let close = -1;
+    const commas: number[] = [];
+    for (let i = open; i < pattern.length; i++) {
+      const c = pattern[i];
+      if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) {
+        close = i;
+        break;
+      } else if (c === ',' && depth === 1) commas.push(i);
+    }
+    if (close === -1 || commas.length === 0) continue;
+    const bounds = [open, ...commas, close];
+    const head = pattern.slice(0, open);
+    const tail = pattern.slice(close + 1);
+    const out: string[] = [];
+    for (let k = 0; k < bounds.length - 1; k++) {
+      for (const alt of expandBraces(pattern.slice((bounds[k] as number) + 1, bounds[k + 1]))) {
+        for (const rest of expandBraces(tail)) out.push(head + alt + rest);
+      }
+    }
+    return out;
+  }
+  return [pattern];
+}
+
 function compile(pattern: string, template: boolean): RegExp {
   const key = `${template ? 't' : 'g'}:${pattern}`;
   const hit = cache.get(key);
   if (hit) return hit;
+  if (!template) {
+    const alts = expandBraces(pattern);
+    if (alts.length > 1) {
+      const out = new RegExp(alts.map((a) => `(?:${compile(a, false).source})`).join('|'));
+      cache.set(key, out);
+      return out;
+    }
+  }
   let re = '';
   let i = 0;
   let holes = 0;

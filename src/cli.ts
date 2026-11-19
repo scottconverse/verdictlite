@@ -89,7 +89,16 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (!ctx) return 0;
-    return sub === 'pre-commit' ? preCommit(ctx) : commitMsg(ctx, resolve(process.cwd(), arg as string));
+    try {
+      return sub === 'pre-commit' ? preCommit(ctx) : commitMsg(ctx, resolve(process.cwd(), arg as string));
+    } catch (e) {
+      // In observe mode the gate must never fail a commit. Enforce mode keeps its behavior.
+      if (ctx.config.gate.mode !== 'enforce') {
+        process.stderr.write(`VerdictLite gate error (ignored, observe mode): ${(e as Error).message}\n`);
+        return 0;
+      }
+      throw e;
+    }
   }
   if (cmd === 'stamp') {
     if (sub !== 'verify' && sub !== 'code-review') throw new UsageError('use: vlite stamp <verify|code-review> --result <pass|fail>');

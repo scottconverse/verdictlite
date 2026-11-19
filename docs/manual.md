@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.3. This manual is also on the web at
+Version 0.1.4. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -61,7 +61,7 @@ Two words you will see a lot:
 ## 2. Install VerdictLite
 
 Install it once per machine, in its own folder. Keep it **outside** the repos
-it checks. That way a change in a repo cannot edit the tool that judges it.
+it checks. The tool lives outside the repo, so a change cannot edit the tool itself. `vlite.json` is read from the base branch, but the commands it runs (package.json scripts, pyproject, ruff, mypy and eslint configs) come from the working tree, so a change can still edit what those commands do.
 
 ```sh
 git clone https://github.com/scottconverse/verdictlite.git
@@ -149,7 +149,7 @@ The reviewer is told to run only the rules whose trigger matches the diff.
 
 This step matters. VerdictLite reads `vlite.json` and `REVIEW.md` **from the
 base branch**, not from your working files. So a change on a feature branch
-cannot loosen the checks that judge it.
+cannot loosen the config that judges it. (The commands the config runs still come from the working tree.)
 
 Until `vlite.json` is on the base branch, VerdictLite uses the copy in your
 working tree. It prints this warning each time:
@@ -633,7 +633,7 @@ repo share it.
 
 | File | What it holds |
 |---|---|
-| `state.json` | The last passing tree per branch (per commit for a detached HEAD), round counters, pending gate records, recent blocks. |
+| `state.json` | The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history), round counters, pending gate records, recent blocks. |
 | `stop.jsonl` | One line per stop check: pass, block, handoff or error. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
@@ -650,6 +650,8 @@ That is on purpose. If VerdictLite itself fails (not a check, the tool), the
 stop check prints `VerdictLite stop-check internal error (ignored, not
 blocking): ...` and lets the agent stop. It logs `"result": "error"` in
 `stop.jsonl`. A failing *check* always blocks. A broken *tool* never does.
+
+If VerdictLite itself fails (a broken or mistyped `vlite.json`, a locked file), it still lets the agent stop, but it now says so: the hook prints a `systemMessage` that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in `vlite.json` are an error, so a typo such as `"part"` is caught.
 The same goes for the gate: a broken `vlite.json` prints `VerdictLite gate
 skipped: ...` and lets the commit through.
 
@@ -657,7 +659,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.3 will not
+default branch has another name, such as `master`, VerdictLite 0.1.4 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -670,7 +672,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.3 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.4 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -706,7 +708,7 @@ To remove the command, run `npm unlink -g verdictlite` and delete the clone.
 
 ## 15. Config reference: vlite.json
 
-`vlite.json` is a JSON object. Unknown keys are ignored. A bad value stops the
+`vlite.json` is a JSON object. Unknown top-level keys are an error that names the key. A bad value stops the
 command with a list of every error. An old `prChecks` field is ignored with a
 one-line warning.
 
@@ -871,7 +873,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.3 is the second fix to the first release (0.1.0), built on 2026-11-18. It has 121
+Early. Version 0.1.4 is the second fix to the first release (0.1.0), built on 2026-11-18. It has 153
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

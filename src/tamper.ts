@@ -68,7 +68,7 @@ function cleanPath(p: string, prefix: string): string {
 }
 
 const SKIP =
-  /@pytest\.mark\.(?:skip|xfail)|pytest\.(?:skip|xfail)\(|@unittest\.(?:skip|expectedFailure)|\bxfail\b|\.skip\(|\b(?:it|test|describe)\.skip\b|\bx(?:it|describe|test)\(|\btest\.fixme\b|\.fixme\(/;
+  /pytest\.mark\.(?:skip|xfail)|pytest\.(?:skip|xfail|importorskip)\(|\.skipTest\(|\.skipIf\(|\b(?:it|test|describe)\.only\b|\bf(?:it|describe)\(|@unittest\.(?:skip|expectedFailure)|\bxfail\b|\.skip\(|\b(?:it|test|describe)\.skip\b|\bx(?:it|describe|test)\(|\btest\.fixme\b|\.fixme\(/;
 const SLEEP =
   /\btime\.sleep\(|\basyncio\.sleep\(|\bwaitForTimeout\(|new Promise[^\n]*setTimeout|await\s+(?:\w+\.)?setTimeout\(|setTimeout\(\s*(?:r|res|resolve|done|ok)\s*[,)]/;
 const RETRY_MARK = /@flaky\b|pytest\.mark\.flaky|--reruns\b|\.retries\(\s*[1-9]|jest\.retryTimes\(/;
@@ -92,6 +92,12 @@ export const RETRY_CONFIG_FILES = [
 function maxNumber(text: string): number {
   const nums = (text.match(/\d+/g) ?? []).map(Number);
   return nums.length ? Math.max(...nums) : 0;
+}
+
+/** True when the log names the test as a whole word, so "test_a" is not found inside "test_abc". */
+function inLog(log: string, name: string): boolean {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![A-Za-z0-9_])${esc}(?![A-Za-z0-9_])`).test(log);
 }
 
 export function testName(text: string): string | null {
@@ -124,7 +130,7 @@ export function detectTamper(diffs: FileDiff[], testGlobs: string[], removalsLog
       const hit = (kind: Hit['kind'], advice: string): void => {
         hits.push({ file: d.path, line: a.line, kind, text: a.text.trim(), advice });
       };
-      if (isTest && SKIP.test(a.text)) hit('skip', 'Remove the skip or xfail. Fix the test or the code instead.');
+      if (isTest && SKIP.test(a.text)) hit('skip', 'Remove the skip, xfail or .only. Fix the test or the code instead.');
       if (isTest && SLEEP.test(a.text)) hit('sleep', 'Do not wait a fixed time. Wait for the real condition (poll the state, await the event).');
       if (RETRY_MARK.test(a.text)) hit('retry', 'Do not add retries or reruns. Find out why the test is flaky and fix that.');
       else if (RETRIES_SETTING.test(a.text)) {
@@ -135,7 +141,7 @@ export function detectTamper(diffs: FileDiff[], testGlobs: string[], removalsLog
     if (!isTest) continue;
     for (const r of d.removed) {
       const name = testName(r.text);
-      if (!name || addedNames.has(name) || logText.includes(name)) continue;
+      if (!name || addedNames.has(name) || inLog(logText, name)) continue;
       hits.push({
         file: d.path,
         line: r.line,

@@ -110,12 +110,17 @@ export function branchName(root: string): string {
 }
 
 /**
- * Key for per-branch state. A detached HEAD gets its commit in the key, because many worktrees
- * can be detached at once and must not share one start point (that made a false diff of merged work).
+ * Key for per-branch state. A detached HEAD is keyed by its worktree folder: many worktrees can be detached at once
+ * and must not share one start point, and a key with the commit in it would reset after every commit.
  */
 export function stateKey(root: string): string {
   const name = branchName(root);
   if (name !== 'detached') return name;
-  const r = git(root, ['rev-parse', 'HEAD']);
-  return r.ok ? `detached@${r.out.trim()}` : 'detached';
+  const folder = (process.platform === 'win32' ? root.toLowerCase() : root).replace(/\\/g, '/');
+  return `detached:${folder}`;
+}
+
+/** True when ancestor is HEAD or in HEAD's history. */
+export function isAncestorOfHead(root: string, ancestor: string): boolean {
+  return git(root, ['merge-base', '--is-ancestor', ancestor, 'HEAD']).ok;
 }

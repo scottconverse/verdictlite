@@ -1,4 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { Ctx } from './context.js';
 import { baseTree, stateKey, diffText, refExists, showFile, worktreeTree } from './git.js';
@@ -42,15 +43,26 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
   const diffTruncated = Buffer.byteLength(diff) > MAX_DIFF;
   if (diffTruncated) diff = diff.slice(0, MAX_DIFF);
 
-  const dir = join(ctx.stateDir, 'reviews', stateKey(root).replace(/[^A-Za-z0-9._-]/g, '_'));
+  const key = stateKey(root);
+  // The key can hold a folder path (detached HEAD): make it filesystem-safe, and keep two folders apart with a hash.
+  const safe = key.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+  const dir = join(ctx.stateDir, 'reviews', key.startsWith('detached:') ? `${safe}-${createHash('sha256').update(key).digest('hex').slice(0, 8)}` : safe);
   mkdirSync(dir, { recursive: true });
   const priors = readdirSync(dir)
     .map((f) => /^(\d+)\.json$/.exec(f)?.[1])
     .filter((n): n is string => n !== undefined)
     .map(Number)
     .sort((a, b) => a - b)
-    .map((n) => JSON.parse(readFileSync(join(dir, `${n}.json`), 'utf8')) as Round);
-  const n = (priors.at(-1)?.round ?? 0) + 1;
+    .flatMap((n): Round[] => {
+      try {
+        const r = JSON.parse(readFileSync(join(dir, `${n}.json`), 'utf8')) as Round;
+        return typeof r === 'object' && r !== null && typeof r.round === 'number' && Array.isArray(r.findings) ? [r] : [];
+      } catch {
+        return []; // a torn or hand-edited file must not stop the review
+      }
+    });
+  const numbers = readdirSync(dir).map((f) => /^(\d+)\.json$/.exec(f)?.[1]).filter((x): x is string => x !== undefined).map(Number);
+  const n = Math.max(0, ...numbers, ...priors.map((p) => p.round)) + 1;
   const good = priors.filter((p) => !p.error);
 
   const prompt = buildPrompt({ rules, rulesFile: config.review.rulesFile, base, diff, diffTruncated, priors: good, note: opts.roundNote });
@@ -97,6 +109,12 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
   if (record.fixedFromPrior.length) out.push(`Fixed since last round: ${record.fixedFromPrior.length}`);
   out.push(`Rules checked: ${parsed.rulesChecked.join(', ') || '(none listed)'}`);
   out.push(`Saved: ${path}`);
+  const incomplete = [...(diffTruncated ? ['the diff was cut at 200 KB, so part of the change was not reviewed'] : []), ...(record.rulesSource === 'missing' ? [`${config.review.rulesFile} is not on the base branch, so there were no rules`] : [])];
+  if (important.length === 0 && incomplete.length > 0) {
+    out.push(`No important findings, but NO code-review stamp was written: ${incomplete.join('; ')}.`);
+    process.stdout.write(`${out.join('\n')}\n`);
+    return 2;
+  }
   if (important.length === 0) {
     writeStamp(ctx, 'code-review', 'pass', [path], opts.roundNote, tree);
     out.push('No important findings. Wrote a code-review pass stamp for this tree.');

@@ -2,11 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { allDocs, type Ctx, openRepo } from './context.js';
 import { matchAny } from './glob.js';
-import { baseTree, stateKey, changedFiles, diffText, isTree, repoRoot, worktreeTree } from './git.js';
+import { baseTree, changedFiles, diffText, git, headSha, isAncestorOfHead, isTree, repoRoot, stateKey, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
-import { appendJsonl, readState, stateDir, writeState } from './state.js';
+import { appendJsonl, readState, stateDir, type State, updateState } from './state.js';
 import { detectTamper, formatHits, parseDiff, RETRY_CONFIG_FILES } from './tamper.js';
 
 interface HookInput {
@@ -17,7 +17,7 @@ interface HookInput {
 }
 
 /** What judge decided for one repo. */
-type Verdict = { kind: 'pass' } | { kind: 'block'; reason: string } | { kind: 'handoff'; stopReason: string };
+type Verdict = { kind: 'pass' } | { kind: 'block'; reason: string } | { kind: 'handoff'; stopReason: string } | { kind: 'warn'; message: string };
 
 interface Failure {
   check: string; // "part/check"
@@ -46,7 +46,7 @@ export async function stopCheck(opts: { repo?: string; session?: string; global?
   // A review session (started by `vlite review`) must never run checks or be blocked.
   if (process.env['VLITE_REVIEWER'] === '1') return 0;
   const input = opts.session ? {} : readHookInput();
-  const dir = resolve(input.cwd ?? opts.repo ?? process.cwd());
+  const dir = resolve(opts.repo ?? input.cwd ?? process.cwd());
   const session = opts.session ?? input.session_id ?? 'manual';
   const hookActive = input.stop_hook_active === true;
   if (!opts.global) {
@@ -95,7 +95,7 @@ function safeRoot(dir: string): string | null {
   }
 }
 
-/** Runs judge for one folder. Null when it is not a vlite repo, or on an internal error (fail open). */
+/** Runs judge for one folder. Null when it is not a vlite repo. On an internal or config error it fails open with a warning that the person sees. */
 async function judgeDir(dir: string, session: string, hookActive: boolean): Promise<Verdict | null> {
   try {
     const ctx = openRepo(dir);
@@ -110,20 +110,37 @@ async function judgeDir(dir: string, session: string, hookActive: boolean): Prom
     } catch {
       // nothing more we can do
     }
-    return null;
+    return { kind: 'warn', message: `VerdictLite could not check ${dir}: ${message}. Checks did NOT run.` };
   }
 }
 
-/** One JSON line for Claude Code. A handoff wins over a block. Passes print nothing. */
+/** One JSON line for Claude Code. A handoff wins over a block. Passes print nothing. Warnings ride along, or print alone. */
 function emit(verdicts: Verdict[]): void {
   const stops: string[] = [];
   const reasons: string[] = [];
+  const warnings: string[] = [];
   for (const v of verdicts) {
     if (v.kind === 'handoff') stops.push(v.stopReason);
     else if (v.kind === 'block') reasons.push(v.reason);
+    else if (v.kind === 'warn') warnings.push(v.message);
   }
-  if (stops.length > 0) process.stdout.write(`${JSON.stringify({ continue: false, stopReason: stops.join('\n') })}\n`);
-  else if (reasons.length > 0) process.stdout.write(`${JSON.stringify({ decision: 'block', reason: reasons.join('\n\n') })}\n`);
+  const warn = warnings.join('\n');
+  const out = (o: object): void => void process.stdout.write(`${JSON.stringify(o)}
+`);
+  if (stops.length > 0) out({ continue: false, stopReason: [...stops, ...warnings].join('\n') });
+  else if (reasons.length > 0) out({ decision: 'block', reason: [reasons.join('\n\n'), ...(warn ? [warn] : [])].join('\n\n') });
+  else if (warn) out({ systemMessage: warn });
+}
+
+/** Saves a state change. A failed save is reported on stderr and never drops a block or a pass. */
+function saveState(dir: string, mutate: (s: State) => void): boolean {
+  try {
+    updateState(dir, mutate);
+    return true;
+  } catch (e) {
+    process.stderr.write(`VerdictLite: could not save state (ignored): ${(e as Error).message}\n`);
+    return false;
+  }
 }
 
 async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Verdict> {
@@ -134,14 +151,24 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const last = state.lastPassTree?.[branch];
   if (last === tree) return { kind: 'pass' };
 
-  const from = last && isTree(root, last) ? last : baseTree(root, ctx.base);
+  // A saved pass is a start point only if it still belongs to this line of work: no pass head saved (older state),
+  // HEAD unchanged, or HEAD is a descendant whose tree is exactly the passed tree (the passed work was committed).
+  const head = headSha(root);
+  const savedHead = state.lastPassHead?.[branch];
+  let usable = !!last && isTree(root, last);
+  if (usable && savedHead && savedHead !== head) {
+    usable = isAncestorOfHead(root, savedHead) && head !== null && commitTree(root, head) === last;
+  }
+  const from = usable && last ? last : baseTree(root, ctx.base);
   const changed = changedFiles(root, from, tree);
   const base = { session, tree, branch, from, changed: changed.length, hookActive };
 
   const pass = (extra: object): void => {
-    state.lastPassTree = { ...state.lastPassTree, [branch]: tree };
-    for (const k of Object.keys(state.rounds)) if (k.startsWith(`${session}|`)) delete state.rounds[k];
-    writeState(ctx.stateDir, state);
+    saveState(ctx.stateDir, (s) => {
+      s.lastPassTree = { ...s.lastPassTree, [branch]: tree };
+      if (head) s.lastPassHead = { ...s.lastPassHead, [branch]: head };
+      for (const k of Object.keys(s.rounds)) if (k.startsWith(`${session}|`)) delete s.rounds[k];
+    });
     ctx.log('stop', { ...base, result: 'pass', ...extra });
   };
 
@@ -191,9 +218,14 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   }
 
   const key = `${session}|${failures.map((f) => f.check).sort().join(',')}`;
-  const round = (state.rounds[key] ?? 0) + 1;
-  state.rounds[key] = round;
-  writeState(ctx.stateDir, state);
+  let round = (state.rounds[key] ?? 0) + 1;
+  const saved = saveState(ctx.stateDir, (s) => {
+    round = (s.rounds[key] ?? 0) + 1;
+    delete s.rounds[key]; // re-added last, so the cap keeps the most recent keys
+    // A handoff ends this run of rounds: after a person says "keep going", the next stop starts at round 1.
+    if (round < config.maxRounds) s.rounds[key] = round;
+  });
+  if (!saved) round = (state.rounds[key] ?? 0) + 1; // save failed: still decide from what was read, never drop the block
   const logPath = writeLogs(ctx, failures, changed, round);
   const names = failures.map((f) => f.check);
 
@@ -212,6 +244,12 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const stopReason = `VerdictLite: ${names.join(', ')} still fails after ${round} rounds. A person must look. Last failure: ${why}. Handoff: ${logPath}`;
   ctx.log('stop', { ...base, result: 'handoff', round, failing: names, ran, ...extra, handoff: logPath });
   return { kind: 'handoff', stopReason };
+}
+
+/** Tree of a commit. */
+function commitTree(root: string, head: string): string | null {
+  const r = git(root, ['rev-parse', `${head}^{tree}`]);
+  return r.ok ? r.out.trim() : null;
 }
 
 function describe(f: Failure): string {

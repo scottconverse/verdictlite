@@ -148,7 +148,7 @@ describe('stop-check', () => {
     r.write('src/app.js', 'x\n');
     const out = r.vlite(['stop-check'], { input: hook(r) });
     expect(out.code).toBe(0);
-    expect(out.out).toBe('');
+    expect(String(lastJson(out.out)['systemMessage'])).toContain('Checks did NOT run');
     expect(out.err).toContain('internal error');
     expect(stopLog(r).at(-1)).toMatchObject({ result: 'error' });
   });
