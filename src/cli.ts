@@ -4,6 +4,7 @@ import { ConfigError } from './config.js';
 import { type Ctx, openRepo } from './context.js';
 import { commitMsg, preCommit, report } from './gate.js';
 import { repoRoot } from './git.js';
+import { connect } from './connect.js';
 import { claudeSnippet, install } from './install.js';
 import { review } from './review.js';
 import { type Method, UsageError, writeStamp } from './stamp.js';
@@ -12,6 +13,7 @@ import { stopCheck } from './stopcheck.js';
 const HELP = `vlite - VerdictLite: verification gates for AI coding agents
 
   vlite install [--repo DIR] [--claude] [--uninstall]
+  vlite connect [--claude] [--codex] [--uninstall]  (add the Stop hook to the Claude Code and Codex apps; no flag = both)
   vlite stop-check [--session ID] [--global] (Claude Code Stop hook; reads hook JSON on stdin)
                                              --global: user-level hook; checks the repos the session edited
   vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]
@@ -22,7 +24,7 @@ Every command takes --repo DIR (default: the current folder).
 `;
 
 const VALUE_FLAGS = new Set(['repo', 'session', 'result', 'evidence', 'note', 'days', 'base', 'round-note']);
-const BOOL_FLAGS = new Set(['claude', 'uninstall', 'help', 'global']);
+const BOOL_FLAGS = new Set(['claude', 'codex', 'uninstall', 'help', 'global']);
 
 interface Args {
   pos: string[];
@@ -63,6 +65,13 @@ async function main(argv: string[]): Promise<number> {
     const session = one(args, 'session');
     const repo = one(args, 'repo');
     return stopCheck({ ...(session ? { session } : {}), ...(repo ? { repo } : {}), global: args.flags.has('global') });
+  }
+  if (cmd === 'connect') {
+    const c = args.flags.has('claude');
+    const x = args.flags.has('codex');
+    const apps: ('claude' | 'codex')[] = c || x ? [...(c ? (['claude'] as const) : []), ...(x ? (['codex'] as const) : [])] : ['claude', 'codex'];
+    for (const n of connect({ apps, uninstall: args.flags.has('uninstall') })) process.stdout.write(`${n}\n`);
+    return 0;
   }
   if (cmd === 'install') {
     const root = repoRoot(dir);

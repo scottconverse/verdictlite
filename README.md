@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.8. Early stage. See [Status](#status).
+- Version: 0.1.9. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -95,8 +95,19 @@ The installer needs no admin rights. It does these things:
 4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
    to your user PATH.
 5. Runs `vlite --help` and prints the installed version.
+6. Runs `vlite connect`. This adds the VerdictLite Stop hook to the Claude Code
+   and Codex desktop apps, at user level. To skip this step, run the installer
+   with `-NoConnect`.
 
-Open a new terminal after it finishes. Then run `vlite --help`.
+Open a new terminal after it finishes. Then restart the Claude and Codex apps.
+Codex runs a new hook only after you approve it. In Codex, click **Review
+hooks** in the message box, or open **Settings > Hooks**.
+
+To connect or disconnect the apps later, run `vlite connect` or
+`vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
+
+**Codex limit:** VerdictLite checks only the repo that the Codex session opened
+in. It cannot read the Codex log to find other repos that the session changed.
 
 **To update:** run the installer again. It replaces the files in the same
 folder, so the paths in your git hooks stay valid.
@@ -505,7 +516,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.8.
+  another name, such as `master`, is not searched in 0.1.9.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -513,14 +524,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.8 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.9 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.8 is the eighth fix to the first release (0.1.0), built on 2026-11-19. It is being set
+Early. Version 0.1.9 is the ninth fix to the first release (0.1.0), built on 2026-11-19. It is being set
 up on its first real repo now. Expect changes.
 
-- 162 automated tests (2 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
+- 169 automated tests (2 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

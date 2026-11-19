@@ -56,7 +56,7 @@ jobs:
         run: |
           $ver = $env:TAG.TrimStart('v')
           $base = Join-Path $env:RUNNER_TEMP 'vl-smoke'
-          & ./install.ps1 -Version $ver -InstallDir (Join-Path $base 'app') -NoPath
+          & ./install.ps1 -Version $ver -InstallDir (Join-Path $base 'app') -NoPath -NoConnect
           if (-not $?) { exit 1 }
           "VLITE_CMD=$(Join-Path $base 'bin\vlite.cmd')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: vlite --help
