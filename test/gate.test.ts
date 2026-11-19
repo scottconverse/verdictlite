@@ -166,3 +166,48 @@ describe('gate', () => {
     expect(out).toContain('spike');
   });
 });
+
+describe('stop-check proof', () => {
+  const stopHook = (r: Repo): string => JSON.stringify({ session_id: 's1', cwd: r.dir, stop_hook_active: false });
+
+  it('a passing stop-check counts as proof for the same staged tree, and not after the tree changes', () => {
+    const r = setup('observe');
+    r.write('src/app.js', 'changed\n');
+    const stop = r.vlite(['stop-check'], { input: stopHook(r) });
+    expect(stop.code, stop.err).toBe(0);
+    expect(stop.out).toBe('');
+    r.write('src/app.js', 'changed again\n');
+    expect(commit(r, 'edited after the pass').ok).toBe(true);
+    expect(trailer(r)).toBe('none');
+    r.write('src/app.js', 'third\n');
+    expect(r.vlite(['stop-check'], { input: stopHook(r) }).code).toBe(0);
+    expect(commit(r, 'same tree as the pass').ok).toBe(true);
+    expect(trailer(r)).toBe('stop-check');
+  });
+
+  it('joins with verify in the documented order', () => {
+    const r = setup('observe');
+    r.write('src/app.js', 'both\n');
+    expect(r.vlite(['stop-check'], { input: stopHook(r) }).code).toBe(0);
+    expect(r.vlite(['stamp', 'verify', '--result', 'pass']).code).toBe(0);
+    expect(commit(r, 'both proofs').ok).toBe(true);
+    expect(trailer(r)).toBe('verify+stop-check');
+  });
+
+  it('writes no stop-check stamp when no check ran', () => {
+    const r = setup('observe');
+    r.write('tools/run.sh', 'echo hi\n'); // no part covers tools/
+    const stop = r.vlite(['stop-check'], { input: stopHook(r) });
+    expect(stop.code, stop.err).toBe(0);
+    expect(commit(r, 'nothing ran').ok).toBe(true);
+    expect(trailer(r)).toBe('none');
+  });
+
+  it('rejects vlite stamp stop-check typed by hand', () => {
+    const r = setup('observe');
+    r.write('src/app.js', 'x\n');
+    const out = r.vlite(['stamp', 'stop-check', '--result', 'pass']);
+    expect(out.code).toBe(1);
+    expect(out.err).toContain('vlite stamp <verify|code-review>');
+  });
+});

@@ -6,6 +6,7 @@ import { baseTree, changedFiles, diffText, git, headSha, isAncestorOfHead, isTre
 import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
+import { writeStamp } from './stamp.js';
 import { appendJsonl, readState, stateDir, type State, updateState } from './state.js';
 import { detectTamper, formatHits, parseDiff, RETRY_CONFIG_FILES } from './tamper.js';
 
@@ -170,6 +171,16 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       for (const k of Object.keys(s.rounds)) if (k.startsWith(`${session}|`)) delete s.rounds[k];
     });
     ctx.log('stop', { ...base, result: 'pass', ...extra });
+    // A pass on this exact tree counts as proof at commit, but only when a check really ran and no part was skipped.
+    // A failed stamp write never turns a pass into an error.
+    const e = extra as { ran?: string[]; skipped?: object };
+    if (!e.ran || e.ran.length === 0 || e.skipped) return;
+    try {
+      writeStamp(ctx, 'stop-check', 'pass', [], 'stop-check pass', tree);
+    } catch (e) {
+      process.stderr.write(`VerdictLite: could not write stop-check stamp (ignored): ${(e as Error).message}
+`);
+    }
   };
 
   if (changed.length === 0 || allDocs(config, changed)) {

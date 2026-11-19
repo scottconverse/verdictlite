@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.4. This manual is also on the web at
+Version 0.1.5. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -312,8 +312,10 @@ Here is one session from start to end.
    The gate adds a `Verified-By:` line to the commit message. See
    [section 7](#7-stamps-and-the-verified-by-trailer).
 
-A stop-check pass is not a stamp. It lets the agent stop. It does not mark the
-commit as verified. Only `vlite stamp` and a clean `vlite review` write stamps.
+A stop-check pass lets the agent stop. When at least one check ran and no part
+was skipped, it also writes a `stop-check` stamp for that exact tree, so a commit
+of the same files shows `Verified-By: stop-check`. A pass where no check ran
+(docs only, or files no part covers) writes no stamp. Only `vlite stamp` and a clean `vlite review` write stamps.
 
 ## 5. Read a block message
 
@@ -387,6 +389,7 @@ it passed (or failed)". There are two kinds:
 
 - `verify`: written by you or your verify skill with `vlite stamp verify`.
 - `code-review`: written by `vlite review` when it finds nothing important.
+- `stop-check`: written by the Stop hook (`vlite stop-check`) when it passes. You cannot write it by hand; `vlite stamp` accepts only `verify` and `code-review`.
 
 Write a stamp:
 
@@ -414,7 +417,8 @@ Rules:
 | `docs` | Every staged change is a docs file. |
 | `verify` | A `verify` pass stamp matches the tree. |
 | `code-review` | A `code-review` pass stamp matches the tree. |
-| `verify+code-review` | Both match. |
+| `stop-check` | A passing Stop hook (`vlite stop-check`) ran on the same tree. |
+| `verify+code-review` | Both match. Other mixes are joined by `+`, such as `verify+stop-check`. |
 | `skipped` | The message has a `Verify-Skip:` trailer. |
 | `none` | None of the above. |
 
@@ -659,7 +663,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.4 will not
+default branch has another name, such as `master`, VerdictLite 0.1.5 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -672,7 +676,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.4 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.5 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -873,7 +877,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.4 is the second fix to the first release (0.1.0), built on 2026-11-18. It has 153
+Early. Version 0.1.5 is the fifth fix to the first release (0.1.0), built on 2026-11-18. It has 157
 automated tests that run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

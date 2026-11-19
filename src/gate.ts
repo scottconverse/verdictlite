@@ -16,7 +16,7 @@ function saveState(ctx: Ctx, mutate: (s: State) => void): void {
   }
 }
 
-/** How the staged tree was checked: verify, code-review, verify+code-review, docs, or none. */
+/** How the staged tree was checked: verify, code-review, stop-check (any mix joined by +), docs, or none. */
 export function methodFor(ctx: Ctx, tree: string): string {
   const head = headSha(ctx.root);
   const from = head ? gitOut(ctx.root, ['rev-parse', `${head}^{tree}`]) : emptyTree(ctx.root);
