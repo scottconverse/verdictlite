@@ -1,9 +1,15 @@
 name: release
 
-# Runs only when a release is published (never on push).
+# Runs when a release is published (never on push).
+# It can also be run by hand for an existing tag, to re-check a release.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to check, for example v0.1.8
+        required: true
 
 jobs:
   assets:
@@ -11,12 +17,12 @@ jobs:
     permissions:
       contents: write
     env:
-      TAG: ${{ github.event.release.tag_name }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -41,11 +47,11 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     env:
-      TAG: ${{ github.event.release.tag_name }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - name: Install from the release assets (real download)
         run: |
           $ver = $env:TAG.TrimStart('v')
@@ -55,7 +61,11 @@ jobs:
           "VLITE_CMD=$(Join-Path $base 'bin\vlite.cmd')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: vlite --help
         run: |
-          $first = & $env:VLITE_CMD --help | Select-Object -First 1
+          # Read all output first: Select-Object -First 1 stops node early and
+          # Windows PowerShell 5.1 then exits with code -1.
+          $out = @(& $env:VLITE_CMD --help)
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $first = $out | Select-Object -First 1
           Write-Host $first
           if ($first -notmatch 'VerdictLite') { exit 1 }
       - name: vlite install in a fresh repo
@@ -75,7 +85,7 @@ jobs:
     permissions:
       contents: read
     env:
-      TAG: ${{ github.event.release.tag_name }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Download install-verdictlite.cmd from the release and run it
@@ -87,7 +97,9 @@ jobs:
         shell: pwsh
         run: |
           $cmd = Join-Path $env:LOCALAPPDATA 'VerdictLite\bin\vlite.cmd'
-          $first = & $cmd --help | Select-Object -First 1
+          $out = @(& $cmd --help)
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $first = $out | Select-Object -First 1
           Write-Host $first
           if ($first -notmatch 'VerdictLite') { exit 1 }
           $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
