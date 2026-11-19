@@ -175,7 +175,11 @@ if ($NoPath) {
 
 # 5. Prove it
 Step $steps[4]
-$first = (& $cmdFile --help 2>&1 | Select-Object -First 1) | Out-String
+# Read ALL the output first. Select-Object -First 1 would stop node early, and
+# Windows PowerShell 5.1 then keeps exit code -1 in $LASTEXITCODE.
+$helpOut = @(& $cmdFile --help 2>&1)
+if ($LASTEXITCODE -ne 0) { throw "vlite --help failed with exit code $LASTEXITCODE" }
+$first = ($helpOut | Select-Object -First 1) | Out-String
 if ($first -notmatch 'VerdictLite') { throw "vlite --help did not work. First line: $first" }
 $installed = (Get-Content -Raw (Join-Path $InstallDir 'package.json') | ConvertFrom-Json).version
 Ok "$($first.Trim())"
