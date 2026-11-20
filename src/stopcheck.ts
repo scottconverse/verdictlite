@@ -6,6 +6,7 @@ import { baseTree, changedFiles, diffText, git, headSha, isAncestorOfHead, isTre
 import { planParts } from './parts.js';
 import { lastLines, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
+import { originOwner, readSettings } from './settings.js';
 import { writeStamp } from './stamp.js';
 import { appendJsonl, readState, stateDir, type State, updateState } from './state.js';
 import { detectTamper, formatHits, parseDiff, RETRY_CONFIG_FILES } from './tamper.js';
@@ -100,7 +101,7 @@ function safeRoot(dir: string): string | null {
 async function judgeDir(dir: string, session: string, hookActive: boolean): Promise<Verdict | null> {
   try {
     const ctx = openRepo(dir);
-    if (!ctx) return null;
+    if (!ctx) return missingConfig(dir, hookActive);
     return await judge(ctx, session, hookActive);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -113,6 +114,24 @@ async function judgeDir(dir: string, session: string, hookActive: boolean): Prom
     }
     return { kind: 'warn', message: `VerdictLite could not check ${dir}: ${message}. Checks did NOT run.` };
   }
+}
+
+/** A repo with no vlite.json: when its GitHub org is required, block once and tell the agent to add one. */
+function missingConfig(dir: string, hookActive: boolean): Verdict | null {
+  const root = repoRoot(dir);
+  if (!root) return null;
+  const owner = originOwner(root);
+  if (!owner || !readSettings().requiredOrgs.includes(owner)) return null;
+  try {
+    appendJsonl(join(stateDir(root), 'stop.jsonl'), { result: 'missing-config', org: owner, hookActive });
+  } catch {
+    // the log is a convenience; never lose the verdict over it
+  }
+  if (hookActive) return { kind: 'warn', message: `VerdictLite: this repo (${root}) belongs to the required GitHub org "${owner}" and still has no vlite.json.` };
+  return {
+    kind: 'block',
+    reason: `VerdictLite: this repo (${root}) belongs to the GitHub org "${owner}", and every repo there must be guarded by VerdictLite. It has no vlite.json yet. Write vlite.json at the repo root with the checks this repo needs (lint, tests, build), run them once to prove they pass, then run "vlite install" in the repo and commit vlite.json to the default branch. Guide: https://github.com/scottconverse/verdictlite/blob/main/docs/manual.md#3-set-up-a-repo . A docs-only repo can use {"version": 1, "parts": []}.`,
+  };
 }
 
 /** One JSON line for Claude Code. A handoff wins over a block. Passes print nothing. Warnings ride along, or print alone. */

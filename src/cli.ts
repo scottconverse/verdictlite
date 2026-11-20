@@ -7,6 +7,7 @@ import { repoRoot } from './git.js';
 import { connect } from './connect.js';
 import { claudeSnippet, install } from './install.js';
 import { review } from './review.js';
+import { readSettings, writeSettings } from './settings.js';
 import { type Method, UsageError, writeStamp } from './stamp.js';
 import { stopCheck } from './stopcheck.js';
 
@@ -18,13 +19,14 @@ const HELP = `vlite - VerdictLite: verification gates for AI coding agents
                                              --global: user-level hook; checks the repos the session edited
   vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]
   vlite gate <pre-commit | commit-msg FILE | report [--days N]>
+  vlite require-org [NAME | --remove NAME | --list]  (every repo of this GitHub org must have a vlite.json; no args = list)
   vlite review [--base REF] [--round-note TEXT]
 
 Every command takes --repo DIR (default: the current folder).
 `;
 
-const VALUE_FLAGS = new Set(['repo', 'session', 'result', 'evidence', 'note', 'days', 'base', 'round-note']);
-const BOOL_FLAGS = new Set(['claude', 'codex', 'uninstall', 'help', 'global']);
+const VALUE_FLAGS = new Set(['repo', 'session', 'result', 'evidence', 'note', 'days', 'base', 'round-note', 'remove']);
+const BOOL_FLAGS = new Set(['claude', 'codex', 'uninstall', 'help', 'global', 'list']);
 
 interface Args {
   pos: string[];
@@ -71,6 +73,26 @@ async function main(argv: string[]): Promise<number> {
     const x = args.flags.has('codex');
     const apps: ('claude' | 'codex')[] = c || x ? [...(c ? (['claude'] as const) : []), ...(x ? (['codex'] as const) : [])] : ['claude', 'codex'];
     for (const n of connect({ apps, uninstall: args.flags.has('uninstall') })) process.stdout.write(`${n}\n`);
+    return 0;
+  }
+  if (cmd === 'require-org') {
+    const settings = readSettings();
+    const remove = one(args, 'remove');
+    const name = (sub ?? '').trim().toLowerCase();
+    if (remove !== undefined) {
+      const org = remove.trim().toLowerCase();
+      if (!settings.requiredOrgs.includes(org)) throw new UsageError(`"${org}" is not in the required list`);
+      writeSettings({ ...settings, requiredOrgs: settings.requiredOrgs.filter((o) => o !== org) });
+      process.stdout.write(`Removed "${org}" from the required orgs.\n`);
+      return 0;
+    }
+    if (name && !args.flags.has('list')) {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new UsageError(`not a GitHub org name: ${name}`);
+      if (!settings.requiredOrgs.includes(name)) writeSettings({ ...settings, requiredOrgs: [...settings.requiredOrgs, name] });
+      process.stdout.write(`Every repo of the GitHub org "${name}" must now have a vlite.json.\n`);
+      return 0;
+    }
+    process.stdout.write(settings.requiredOrgs.length > 0 ? `${settings.requiredOrgs.join('\n')}\n` : 'No required orgs.\n');
     return 0;
   }
   if (cmd === 'install') {
