@@ -251,7 +251,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
     <div class="caps">
       <div class="cap">
         <h3>Stop check</h3>
-        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch.</p>
+        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch. If only test files changed since the part last passed, a check with <code>runFiles</code> runs just those test files.</p>
       </div>
       <div class="cap">
         <h3>Three-round hand-off</h3>
@@ -263,7 +263,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
       </div>
       <div class="cap">
         <h3>Test-tamper check</h3>
-        <p>Flags added skips, fixed sleeps, retries and removed tests in your test files. A test you remove on purpose is written down in <code>TEST-REMOVALS.md</code>.</p>
+        <p>Flags added skips, fixed sleeps, retries and removed tests in your test files. A skip whose only condition is the operating system is allowed. A test you remove on purpose is written down in <code>TEST-REMOVALS.md</code>.</p>
       </div>
       <div class="cap">
         <h3>Stamps</h3>

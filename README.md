@@ -459,6 +459,7 @@ An old `prChecks` field is ignored with a one-line warning.
 | `parts[].checks` | list | required, at least one | Checks, run in order. |
 | `checks[].name` | string | required | Check name. |
 | `checks[].run` | string | required | Command line. Runs through `cmd.exe` on Windows, `sh` elsewhere. |
+| `checks[].runFiles` | string | none | Optional narrow form of `run`. Must contain `{files}`. When the part passed before and only its test files changed since, only those test files run. See the manual, "How to: rerun only the tests that changed". |
 | `checks[].cwd` | string | the part's `cwd` | Folder for this check. |
 | `checks[].timeoutSec` | number | `600` | Seconds before the check is killed and fails. |
 | `tests.paths` | list of globs | `[]` | Test files for the tamper check. |
