@@ -89,6 +89,46 @@ export const RETRY_CONFIG_FILES = [
   '**/conftest.py',
 ];
 
+const COND_SKIP = /(?:pytest\.mark\.skipif|\.skipIf|\.skipUnless|\.runIf)\s*\(/;
+// The only things a platform guard may test: the OS name, compared with a plain string.
+const PLATFORM_TOKENS =
+  /sys\.platform(?:\.startswith\(\s*(['"])[\w.-]+\1\s*\))?|os\.name|platform\.system\(\)|process\.platform|(['"])[\w.-]+\2|[=!]==?|\bnot\b|\band\b|\bor\b|&&|\|\||!|[()]|\s+/g;
+
+/**
+ * True when the added line starts a conditional skip whose condition is only a platform check, for example
+ * `pytest.mark.skipif(os.name != "nt", reason="...")` or `it.skipIf(process.platform !== 'win32')`.
+ * A test that runs only on the OS it is for is not tamper. The condition may go on in the next added lines.
+ */
+function isPlatformGuard(lines: Line[], i: number): boolean {
+  const first = lines[i];
+  if (!first) return false;
+  const start = COND_SKIP.exec(first.text);
+  if (!start) return false;
+  let text = first.text.slice(start.index + start[0].length);
+  for (let j = i + 1; j < lines.length && j <= i + 5 && lines[j]?.line === (lines[j - 1]?.line ?? 0) + 1; j++) text += ` ${lines[j]?.text ?? ''}`;
+  // The condition is the first argument: up to the first comma or closing paren at depth 0.
+  let depth = 0;
+  let end = -1;
+  for (let k = 0; k < text.length; k++) {
+    const c = text[k];
+    if (c === '(') depth++;
+    else if (c === ')') {
+      if (depth === 0) {
+        end = k;
+        break;
+      }
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      end = k;
+      break;
+    }
+  }
+  if (end < 0) return false;
+  const cond = text.slice(0, end);
+  if (!/sys\.platform|os\.name|platform\.system\(\)|process\.platform/.test(cond)) return false;
+  return cond.replace(PLATFORM_TOKENS, '') === '';
+}
+
 function maxNumber(text: string): number {
   const nums = (text.match(/\d+/g) ?? []).map(Number);
   return nums.length ? Math.max(...nums) : 0;
@@ -126,11 +166,11 @@ export function detectTamper(diffs: FileDiff[], testGlobs: string[], removalsLog
     const isTest = matchAny(testGlobs, d.path);
     const isRetryConfig = matchAny(RETRY_CONFIG_FILES, d.path);
     if (!isTest && !isRetryConfig) continue;
-    for (const a of d.added) {
+    for (const [i, a] of d.added.entries()) {
       const hit = (kind: Hit['kind'], advice: string): void => {
         hits.push({ file: d.path, line: a.line, kind, text: a.text.trim(), advice });
       };
-      if (isTest && SKIP.test(a.text)) hit('skip', 'Remove the skip, xfail or .only. Fix the test or the code instead.');
+      if (isTest && SKIP.test(a.text) && !isPlatformGuard(d.added, i)) hit('skip', 'Remove the skip, xfail or .only. Fix the test or the code instead.');
       if (isTest && SLEEP.test(a.text)) hit('sleep', 'Do not wait a fixed time. Wait for the real condition (poll the state, await the event).');
       if (RETRY_MARK.test(a.text)) hit('retry', 'Do not add retries or reruns. Find out why the test is flaky and fix that.');
       else if (RETRIES_SETTING.test(a.text)) {

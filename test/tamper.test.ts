@@ -46,7 +46,10 @@ describe('test-tamper detectors', () => {
   describe('skip markers (red)', () => {
     for (const line of [
       '@pytest.mark.skip(reason="later")',
-      '@pytest.mark.skipif(sys.platform == "win32", reason="x")',
+      '@pytest.mark.skipif(sys.platform == "win32" and flaky, reason="x")',
+      '@pytest.mark.skipif(True, reason="x")',
+      '@pytest.mark.skipif(IS_CI, reason="x")',
+      "it.skipIf(isCI || process.platform === 'win32')('a', () => {})",
       '    pytest.skip("flaky")',
       '@unittest.skip("x")',
       '@pytest.mark.xfail',
@@ -57,6 +60,19 @@ describe('test-tamper detectors', () => {
       "test.fixme('works', async () => {})",
     ]) {
       it(line, () => expect(kinds([add('tests/test_x.py', line)])).toContain('skip'));
+    }
+  });
+  describe('platform guards are not tamper (green)', () => {
+    for (const lines of [
+      ['@pytest.mark.skipif(sys.platform == "win32", reason="x")'],
+      ['    pytest.mark.skipif(os.name != "nt", reason="real Win32 ACL is only meaningful on Windows"),'],
+      ['@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="x")'],
+      ['@pytest.mark.skipif(platform.system() != "Windows", reason="x")'],
+      ['@unittest.skipUnless(sys.platform == "win32", "Windows only")'],
+      ["it.skipIf(process.platform !== 'win32')('reads paths', () => {})"],
+      ['_WINDOWS_PATH_TEST = pytest.mark.skipif(', '    os.name != "nt",', '    reason="Windows paths",', ')'],
+    ]) {
+      it(lines.join(' '), () => expect(kinds([add('tests/test_x.py', ...lines)])).toEqual([]));
     }
   });
   it('skip markers outside test files are ignored (green)', () => {
