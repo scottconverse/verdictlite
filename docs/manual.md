@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.10. This manual is also on the web at
+Version 0.1.11. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -332,6 +332,34 @@ description: Prove the current change works before you commit. Use after any cod
 Add `.verify/` to `.gitignore` so the evidence files do not change the tree id.
 The skill file is listed in `codeDespiteDocs` in the example config, so a change
 to it counts as code.
+
+### Require VerdictLite in a GitHub org
+
+You can say that every repo of a GitHub org must have VerdictLite. Run this
+once on your PC:
+
+```
+vlite require-org forkcommons
+vlite require-org --list
+vlite require-org --remove forkcommons
+```
+
+The name is not case sensitive. VerdictLite saves the list in
+`settings.json` in the VerdictLite home folder.
+
+Here is what happens next. The global Stop hook finds a repo whose `origin`
+remote is on github.com and belongs to a listed org. If that repo has no
+`vlite.json`, VerdictLite blocks the agent once. The message tells the agent to
+write `vlite.json`, run the checks, run `vlite install`, and commit the file.
+If the agent stops again in the same turn, VerdictLite only warns. It never
+blocks twice in one turn. A `vlite.json` in the working tree counts as present.
+
+Limits:
+
+- This runs only on PCs where VerdictLite is installed and connected.
+- A repo with no `origin` remote, or an `origin` on another host, is not
+  checked.
+- Codex checks only the folder the session opened in.
 
 ## 4. What happens in a normal agent session
 
@@ -730,7 +758,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.10 will not
+default branch has another name, such as `master`, VerdictLite 0.1.11 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -743,7 +771,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.10 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.11 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -909,6 +937,7 @@ Every command takes `--repo DIR`. The default is the current folder.
 | `vlite gate commit-msg FILE` | Called by the `commit-msg` hook. Blocks in `enforce` mode and adds the trailer. |
 | `vlite gate report [--days N]` | Prints the gate report. |
 | `vlite review [--base REF] [--round-note TEXT]` | Runs one AI review round. |
+| `vlite require-org [NAME \| --remove NAME \| --list]` | Says that every repo of a GitHub org must have a `vlite.json`. `NAME` adds an org. `--remove NAME` removes it. `--list`, or no argument, shows the list. |
 
 Environment variables:
 
@@ -948,7 +977,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.10 is the tenth fix to the first release (0.1.0), built on 2026-11-19. It has 170
+Early. Version 0.1.11 is the eleventh fix to the first release (0.1.0), built on 2026-11-19. It has 192
 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.
