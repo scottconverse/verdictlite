@@ -12,6 +12,8 @@
 #      because git hooks keep its path.
 #   4. Writes %LOCALAPPDATA%\VerdictLite\bin\vlite.cmd and adds that bin folder to your user PATH.
 #   5. Runs vlite --help to prove it works.
+#   6. Runs vlite connect. It adds the VerdictLite Stop hook to the Claude Code and Codex desktop apps
+#      (user level). Use -NoConnect to skip this.
 #
 # Nothing needs administrator rights. Runs on Windows PowerShell 5.1 and PowerShell 7.
 # Run it again at any time to update.
@@ -26,6 +28,8 @@ param(
     [string]$ZipPath = '',
     # Do not change the user PATH.
     [switch]$NoPath,
+    # Do not connect VerdictLite to the Claude Code and Codex desktop apps.
+    [switch]$NoConnect,
     # Print the steps and change nothing.
     [switch]$PlanOnly
 )
@@ -69,7 +73,8 @@ $steps = @(
     'Download verdictlite.zip and check its SHA-256',
     'Put the files in the install folder',
     'Write vlite.cmd and add its folder to the user PATH',
-    'Run vlite --help to check it works'
+    'Run vlite --help to check it works',
+    'Connect VerdictLite to the Claude and Codex desktop apps'
 )
 if ($PlanOnly) {
     $i = 1
@@ -185,10 +190,25 @@ $installed = (Get-Content -Raw (Join-Path $InstallDir 'package.json') | ConvertF
 Ok "$($first.Trim())"
 Ok "VerdictLite $installed is installed"
 
+# 6. Connect the desktop apps
+Step $steps[5]
+if ($NoConnect) {
+    Note "-NoConnect: the Claude and Codex apps were not changed"
+} else {
+    # Read ALL the output first, for the same reason as above.
+    $connectOut = @(& $cmdFile connect 2>&1)
+    $connectCode = $LASTEXITCODE
+    foreach ($line in $connectOut) {
+        $text = ($line | Out-String).TrimEnd()
+        if ($text -match 'connected|already|removed') { Ok $text } else { Note $text }
+    }
+    if ($connectCode -ne 0) { throw "vlite connect failed with exit code $connectCode" }
+}
+
 Write-Host ""
 Write-Host "Next steps" -ForegroundColor Cyan
-Note "1. Open a NEW terminal, so it sees the new PATH."
-Note "2. In the repo you want to guard, write vlite.json:"
-Note "   https://github.com/scottconverse/verdictlite/blob/main/docs/manual.md#3-set-up-a-repo"
-Note "3. In that repo, run:  vlite install --claude"
+Note "1. Restart the Claude and Codex apps."
+Note "2. In Codex, approve the hook: click Review hooks, or open Settings > Hooks."
+Note "3. In each repo you want to guard, ask the agent to write vlite.json, then run:  vlite install"
+Note "   How to write vlite.json: https://github.com/scottconverse/verdictlite/blob/main/docs/manual.md#3-set-up-a-repo"
 Note "To update later, run this installer again."

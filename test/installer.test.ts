@@ -20,7 +20,7 @@ function runCmd(cmd: string): { code: number; out: string } {
 }
 
 function install(zip: string, dir: string): { code: number; out: string } {
-  return run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ZipPath', zip, '-InstallDir', dir, '-NoPath']);
+  return run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ZipPath', zip, '-InstallDir', dir, '-NoPath', '-NoConnect']);
 }
 
 describe('install.ps1', () => {

@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.8. This manual is also on the web at
+Version 0.1.9. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -86,8 +86,19 @@ The installer needs no admin rights. It does these things:
 4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
    to your user PATH.
 5. Runs `vlite --help` and prints the installed version.
+6. Runs `vlite connect`. This adds the VerdictLite Stop hook to the Claude Code
+   and Codex desktop apps, at user level. To skip this step, run the installer
+   with `-NoConnect`.
 
-Open a new terminal after it finishes. Then run `vlite --help`.
+Open a new terminal after it finishes. Then restart the Claude and Codex apps.
+Codex runs a new hook only after you approve it. In Codex, click **Review
+hooks** in the message box, or open **Settings > Hooks**.
+
+To connect or disconnect the apps later, run `vlite connect` or
+`vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
+
+**Codex limit:** VerdictLite checks only the repo that the Codex session opened
+in. It cannot read the Codex log to find other repos that the session changed.
 
 **To update:** run the installer again. It replaces the files in the same
 folder, so the paths in your git hooks stay valid.
@@ -719,7 +730,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.8 will not
+default branch has another name, such as `master`, VerdictLite 0.1.9 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -732,7 +743,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.8 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.9 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -891,6 +902,7 @@ Every command takes `--repo DIR`. The default is the current folder.
 | Command | What it does |
 |---|---|
 | `vlite install [--claude] [--uninstall]` | Writes or removes the git hooks. `--claude` prints the Stop hook settings. |
+| `vlite connect [--claude] [--codex] [--uninstall]` | Adds the Stop hook to the Claude Code and Codex desktop apps (user level). With no flag it does both. `--uninstall` removes only the hooks that `vlite connect` wrote. It makes a backup of each file before it changes it. |
 | `vlite stop-check [--session ID] [--global]` | The Claude Code Stop hook. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With `--session` it does not read stdin, for runs by hand. With `--global` it checks the repos the session edited (user-level hook). |
 | `vlite stamp <verify\|code-review> --result <pass\|fail> [--evidence PATH ...] [--note TEXT]` | Writes a stamp for the current working tree. `--evidence` can be given more than once. |
 | `vlite gate pre-commit` | Called by the `pre-commit` hook. Records the method. Never blocks. |
@@ -936,7 +948,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.8 is the eighth fix to the first release (0.1.0), built on 2026-11-19. It has 162
+Early. Version 0.1.9 is the ninth fix to the first release (0.1.0), built on 2026-11-19. It has 169
 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

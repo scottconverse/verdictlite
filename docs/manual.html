@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VerdictLite 0.1.8 user manual</title>
-  <meta name="description" content="How to install VerdictLite 0.1.8, set up a repo, read block messages, use stamps, Verify-Skip, gate modes, review and the test-tamper rules. Full vlite.json reference and FAQ.">
+  <title>VerdictLite 0.1.9 user manual</title>
+  <meta name="description" content="How to install VerdictLite 0.1.9, set up a repo, read block messages, use stamps, Verify-Skip, gate modes, review and the test-tamper rules. Full vlite.json reference and FAQ.">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="VerdictLite 0.1.8 user manual">
+  <meta property="og:title" content="VerdictLite 0.1.9 user manual">
   <meta property="og:description" content="Install, repo setup, stop check, stamps, commit gate, review, test-tamper rules, config reference and FAQ.">
   <meta property="og:url" content="https://scottconverse.github.io/verdictlite/manual.html">
   <meta name="twitter:card" content="summary">
@@ -25,7 +25,7 @@
     <a class="brand" href="./" aria-label="VerdictLite home">
       <img src="assets/favicon.svg" alt="" width="26" height="26">
       <span>VerdictLite</span>
-      <span class="ver">v0.1.8</span>
+      <span class="ver">v0.1.9</span>
     </a>
     <nav class="site-nav" aria-label="Main">
       <ul>
@@ -70,7 +70,7 @@
 
   <main id="main" class="doc">
     <header>
-      <p class="eyebrow">Version 0.1.8 &middot; also in the repo as <code>docs/manual.md</code></p>
+      <p class="eyebrow">Version 0.1.9 &middot; also in the repo as <code>docs/manual.md</code></p>
       <h1>VerdictLite user manual</h1>
       <p class="lede">VerdictLite (<code>vlite</code>) is a small command-line tool. It makes an AI coding agent run your checks before it stops, and it writes down how each commit was checked.</p>
     </header>
@@ -92,8 +92,10 @@
 <p>Or run this one line in PowerShell:</p>
 <pre tabindex="0"><code class="lang-powershell">irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex</code></pre>
 <p>The installer needs no admin rights. It does these things:</p>
-<ol><li>Checks for Node.js 20 or newer. If it is missing, it installs Node.js with <code>winget</code> for your user only. With no <code>winget</code>, it stops and tells you to get Node.js from <a href="https://nodejs.org/">https://nodejs.org/</a>.</li><li>Downloads <code>verdictlite.zip</code> from the release and checks its SHA-256. If the checksum is wrong, it stops and changes nothing.</li><li>Puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. The folder is always the same, because the git hooks keep its path.</li><li>Writes <code>%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd</code> and adds that <code>bin</code> folder to your user PATH.</li><li>Runs <code>vlite --help</code> and prints the installed version.</li></ol>
-<p>Open a new terminal after it finishes. Then run <code>vlite --help</code>.</p>
+<ol><li>Checks for Node.js 20 or newer. If it is missing, it installs Node.js with <code>winget</code> for your user only. With no <code>winget</code>, it stops and tells you to get Node.js from <a href="https://nodejs.org/">https://nodejs.org/</a>.</li><li>Downloads <code>verdictlite.zip</code> from the release and checks its SHA-256. If the checksum is wrong, it stops and changes nothing.</li><li>Puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. The folder is always the same, because the git hooks keep its path.</li><li>Writes <code>%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd</code> and adds that <code>bin</code> folder to your user PATH.</li><li>Runs <code>vlite --help</code> and prints the installed version.</li><li>Runs <code>vlite connect</code>. This adds the VerdictLite Stop hook to the Claude Code and Codex desktop apps, at user level. To skip this step, run the installer with <code>-NoConnect</code>.</li></ol>
+<p>Open a new terminal after it finishes. Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it. In Codex, click <strong>Review hooks</strong> in the message box, or open <strong>Settings &gt; Hooks</strong>.</p>
+<p>To connect or disconnect the apps later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Add <code class="nw">--claude</code> or <code class="nw">--codex</code> to pick one app.</p>
+<p><strong>Codex limit:</strong> VerdictLite checks only the repo that the Codex session opened in. It cannot read the Codex log to find other repos that the session changed.</p>
 <p><strong>To update:</strong> run the installer again. It replaces the files in the same folder, so the paths in your git hooks stay valid.</p>
 <p><strong>To uninstall:</strong> in each guarded repo, run <code>vlite install --uninstall</code> to remove its hooks. Then delete the folder <code>%LOCALAPPDATA%\VerdictLite</code>. Last, remove <code>%LOCALAPPDATA%\VerdictLite\bin</code> from your user PATH (Windows Settings, search for &quot;environment variables&quot;, then &quot;Edit environment variables for your account&quot;).</p>
 <h3 id="from-source-any-os">From source (any OS)</h3>
@@ -354,9 +356,9 @@ Overrides (Verify-Skip): 1
 <p>The <code>.jsonl</code> files are append-only logs, one JSON object per line, with ISO times. You can delete the folder to reset VerdictLite for a repo.</p>
 <h2 id="14-troubleshooting">14. Troubleshooting</h2>
 <p><strong>The tool broke, and the agent stopped anyway.</strong> That is on purpose. If VerdictLite itself fails (not a check, the tool), the stop check prints <code>VerdictLite stop-check internal error (ignored, not blocking): ...</code> and lets the agent stop. It logs <code>"result": "error"</code> in <code>stop.jsonl</code>. A failing <em>check</em> always blocks. A broken <em>tool</em> never does. If VerdictLite itself fails (a broken or mistyped <code>vlite.json</code>, a locked file), it still lets the agent stop, but it now says so: the hook prints a <code>systemMessage</code> that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in <code>vlite.json</code> are an error, so a typo such as <code>"part"</code> is caught. If VerdictLite itself fails (a broken or mistyped <code>vlite.json</code>, a locked file), it still lets the agent stop, but it now says so: the hook prints a <code>systemMessage</code> that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in <code>vlite.json</code> are an error, so a typo such as <code>"part"</code> is caught. The same goes for the gate: a broken <code>vlite.json</code> prints <code>VerdictLite gate skipped: ...</code> and lets the commit through.</p>
-<p><strong>"vlite.json is not on the base branch yet".</strong> Merge <code>vlite.json</code> to the base branch and run <code>git fetch</code>. VerdictLite looks for <code>vlite.json</code> on <code>origin/main</code> first, then <code>main</code>. If the file there names another <code>base</code> that has its own <code>vlite.json</code>, that copy is used. If your default branch has another name, such as <code>master</code>, VerdictLite 0.1.8 will not find the config there and stays in bootstrap mode.</p>
+<p><strong>"vlite.json is not on the base branch yet".</strong> Merge <code>vlite.json</code> to the base branch and run <code>git fetch</code>. VerdictLite looks for <code>vlite.json</code> on <code>origin/main</code> first, then <code>main</code>. If the file there names another <code>base</code> that has its own <code>vlite.json</code>, that copy is used. If your default branch has another name, such as <code>master</code>, VerdictLite 0.1.9 will not find the config there and stays in bootstrap mode.</p>
 <p><strong>Nothing happens at all.</strong> With no <code>vlite.json</code> anywhere, every command exits 0 and does nothing. Check that you are in the right repo and that the file is named <code>vlite.json</code>.</p>
-<p><strong>My old git hooks.</strong> <code>vlite install</code> keeps a foreign hook as <code>&lt;name&gt;.vlite-prev</code> and runs it first. If both the hook and a <code>.vlite-prev</code> file already exist, install stops with <code>... is not ours and ... already exists. Move one of them by hand.</code> Merge or move one of them, then run install again. If a hook manager sets <code>core.hooksPath</code>, install writes to that folder. If the manager rewrites the folder later, run <code>vlite install</code> again. VerdictLite 0.1.8 has not been tested with specific hook managers.</p>
+<p><strong>My old git hooks.</strong> <code>vlite install</code> keeps a foreign hook as <code>&lt;name&gt;.vlite-prev</code> and runs it first. If both the hook and a <code>.vlite-prev</code> file already exist, install stops with <code>... is not ours and ... already exists. Move one of them by hand.</code> Merge or move one of them, then run install again. If a hook manager sets <code>core.hooksPath</code>, install writes to that folder. If the manager rewrites the folder later, run <code>vlite install</code> again. VerdictLite 0.1.9 has not been tested with specific hook managers.</p>
 <p><strong>The hooks stopped working after I moved VerdictLite or changed Node.</strong> The hooks call the exact <code>node</code> and <code>dist/cli.js</code> paths from install time. Run <code>vlite install</code> again in each repo.</p>
 <p><strong>My stamp does not count; the trailer says <code>none</code>.</strong> The staged tree must match the tree you stamped. Run <code>git add -A</code>, stamp again and commit. Check that evidence files are ignored by git.</p>
 <p><strong>The stop check is slow.</strong> It hashes the whole working tree each time and runs about 15 git commands. This adds a short wait before any check runs. The time is not measured yet. Large repos take longer. Your checks add their own time.</p>
@@ -403,7 +405,7 @@ Overrides (Verify-Skip): 1
 <ul><li>A change to <code>civiccast/egress/net.py</code> runs <code>pytest tests/egress</code>. Messages call the part <code>backend:egress</code>.</li><li>A change in two modules runs both test folders.</li><li>A module with no <code>tests/&lt;module&gt;</code> folder is skipped. <code>requires</code> does this. The <code>stop.jsonl</code> line says <code>"skipped": {"backend:foo": "requires missing: tests/foo"}</code>.</li><li>A file right in <code>civiccast/</code> is in no module, so this part does not run for it. Add a plain part for those files if they need checks.</li></ul>
 <h2 id="16-command-reference">16. Command reference</h2>
 <p>Every command takes <code>--repo DIR</code>. The default is the current folder.</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>vlite install [--claude] [--uninstall]</code></td><td>Writes or removes the git hooks. <code class="nw">--claude</code> prints the Stop hook settings.</td></tr><tr><td><code>vlite stop-check [--session ID] [--global]</code></td><td>The Claude Code Stop hook. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With <code class="nw">--session</code> it does not read stdin, for runs by hand. With <code class="nw">--global</code> it checks the repos the session edited (user-level hook).</td></tr><tr><td><code>vlite stamp &lt;verify|code-review&gt; --result &lt;pass|fail&gt; [--evidence PATH ...] [--note TEXT]</code></td><td>Writes a stamp for the current working tree. <code class="nw">--evidence</code> can be given more than once.</td></tr><tr><td><code class="nw">vlite gate pre-commit</code></td><td>Called by the <code class="nw">pre-commit</code> hook. Records the method. Never blocks.</td></tr><tr><td><code>vlite gate commit-msg FILE</code></td><td>Called by the <code class="nw">commit-msg</code> hook. Blocks in <code class="nw">enforce</code> mode and adds the trailer.</td></tr><tr><td><code>vlite gate report [--days N]</code></td><td>Prints the gate report.</td></tr><tr><td><code>vlite review [--base REF] [--round-note TEXT]</code></td><td>Runs one AI review round.</td></tr></tbody></table></div>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>vlite install [--claude] [--uninstall]</code></td><td>Writes or removes the git hooks. <code class="nw">--claude</code> prints the Stop hook settings.</td></tr><tr><td><code>vlite connect [--claude] [--codex] [--uninstall]</code></td><td>Adds the Stop hook to the Claude Code and Codex desktop apps (user level). With no flag it does both. <code class="nw">--uninstall</code> removes only the hooks that <code>vlite connect</code> wrote. It makes a backup of each file before it changes it.</td></tr><tr><td><code>vlite stop-check [--session ID] [--global]</code></td><td>The Claude Code Stop hook. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With <code class="nw">--session</code> it does not read stdin, for runs by hand. With <code class="nw">--global</code> it checks the repos the session edited (user-level hook).</td></tr><tr><td><code>vlite stamp &lt;verify|code-review&gt; --result &lt;pass|fail&gt; [--evidence PATH ...] [--note TEXT]</code></td><td>Writes a stamp for the current working tree. <code class="nw">--evidence</code> can be given more than once.</td></tr><tr><td><code class="nw">vlite gate pre-commit</code></td><td>Called by the <code class="nw">pre-commit</code> hook. Records the method. Never blocks.</td></tr><tr><td><code>vlite gate commit-msg FILE</code></td><td>Called by the <code class="nw">commit-msg</code> hook. Blocks in <code class="nw">enforce</code> mode and adds the trailer.</td></tr><tr><td><code>vlite gate report [--days N]</code></td><td>Prints the gate report.</td></tr><tr><td><code>vlite review [--base REF] [--round-note TEXT]</code></td><td>Runs one AI review round.</td></tr></tbody></table></div>
 <p>Environment variables:</p>
 <ul><li><code>VLITE_HOME</code>: where state lives. Default <code>~/.verdictlite</code>.</li><li><code>VLITE_REVIEW_CMD</code>: replaces <code>review.command</code>.</li></ul>
 <h2 id="17-faq">17. FAQ</h2>
@@ -414,14 +416,14 @@ Overrides (Verify-Skip): 1
 <p><strong>Does it send my code anywhere?</strong> Only <code>vlite review</code> does, and only to the review command you set (by default the <code>claude</code> CLI). The other commands run on your machine.</p>
 <p><strong>Do I have to use <code>vlite review</code>?</strong> No. A <code>verify</code> stamp alone gives the method <code>verify</code>.</p>
 <p><strong>Is this made by Anthropic?</strong> No. It is an independent project that follows a method Anthropic's Claude Code team described in public.</p>
-<p><strong>What state is the project in?</strong> Early. Version 0.1.8 is the eighth fix to the first release (0.1.0), built on 2026-11-19. It has 162 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes. Report problems at <a href="https://github.com/scottconverse/verdictlite/issues">https://github.com/scottconverse/verdictlite/issues</a>.</p>
+<p><strong>What state is the project in?</strong> Early. Version 0.1.9 is the ninth fix to the first release (0.1.0), built on 2026-11-19. It has 169 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes. Report problems at <a href="https://github.com/scottconverse/verdictlite/issues">https://github.com/scottconverse/verdictlite/issues</a>.</p>
   </main>
 </div>
 
 <footer class="site-footer">
   <div class="wrap cols">
     <div>
-      <p><strong>VerdictLite 0.1.8</strong>. Licensed under Apache-2.0.</p>
+      <p><strong>VerdictLite 0.1.9</strong>. Licensed under Apache-2.0.</p>
       <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. Claude and Claude Code are products of Anthropic.</p>
       <p>Method credit: <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a>, Addy Osmani, November 16, 2026.</p>
     </div>
