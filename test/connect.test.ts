@@ -88,6 +88,18 @@ describe('connect', () => {
     expect(notes.join('\n')).toContain('by hand');
   });
 
+  it('ignores the [hooks.state.*] trust notes that Codex writes to config.toml', () => {
+    const h = homes();
+    mkdirSync(h.codexHome, { recursive: true });
+    writeFileSync(
+      join(h.codexHome, 'config.toml'),
+      "model = \"x\"\n[hooks.state.'C:\\Users\\a\\.codex\\hooks.json:stop:0:0']\ntrusted_hash = \"abc\"\n",
+    );
+    const notes = connect({ ...h, apps: ['codex'] });
+    expect(existsSync(join(h.codexHome, 'hooks.json'))).toBe(true);
+    expect(notes.join('\n')).not.toContain('by hand');
+  });
+
   it('uninstall removes only our handlers (dist/cli.js) and tidies empty groups', () => {
     const h = homes();
     const file = join(h.codexHome, 'hooks.json');

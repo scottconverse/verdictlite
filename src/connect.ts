@@ -138,7 +138,9 @@ export function connect(opts: ConnectOpts): string[] {
     if (!existsSync(home)) notes.push('Codex not found');
     else {
       const toml = join(home, 'config.toml');
-      if (existsSync(toml) && /^\s*\[\[?hooks/m.test(readFileSync(toml, 'utf8'))) {
+      // A hook table such as [hooks] or [[hooks.Stop]] counts. Codex itself writes
+      // [hooks.state.'...'] tables to record hook trust; those are not hooks.
+      if (existsSync(toml) && /^\s*\[\[?hooks(?:\]|\.(?!state[.\]])[^\]]*\])/m.test(readFileSync(toml, 'utf8'))) {
         notes.push(`Codex: ${toml} already has hooks. Codex warns when two places define hooks, so I did not write hooks.json.`);
         if (!uninstall) notes.push(`Add the VerdictLite Stop hook to ${toml} by hand. The command is:\n${command}`);
       } else {
