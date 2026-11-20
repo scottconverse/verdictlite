@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.11. This manual is also on the web at
+Version 0.1.12. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -643,6 +643,13 @@ It looks at **added and removed lines** in changed test files. It fails on:
 - **Added skip markers:** `@pytest.mark.skip`, `pytest.skip(`, `@unittest.skip`,
   `xfail`, `.skip(`, `it.skip`, `test.skip`, `describe.skip`, `xit(`,
   `xdescribe(`, `xtest(`, `test.fixme`.
+  A platform guard is not a skip. This is a conditional skip whose only condition
+  is the operating system, for example
+  `@pytest.mark.skipif(os.name != "nt", reason="...")`,
+  `@unittest.skipUnless(sys.platform == "win32", "...")` or
+  `it.skipIf(process.platform !== 'win32')`. The condition may use only
+  `sys.platform`, `os.name`, `platform.system()` or `process.platform`, compared
+  with a plain string. Any other condition still counts as a skip.
 - **Added fixed waits:** `time.sleep(`, `asyncio.sleep(`, `waitForTimeout(`, and
   `setTimeout` used as a wait.
 - **Added retries:** `@flaky`, `pytest.mark.flaky`, `--reruns`, `.retries(N)`,
@@ -758,7 +765,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.11 will not
+default branch has another name, such as `master`, VerdictLite 0.1.12 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -771,7 +778,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.11 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.12 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -1005,7 +1012,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.11 is the eleventh fix to the first release (0.1.0), built on 2026-11-19. It has 192
+Early. Version 0.1.12 is the twelfth fix to the first release (0.1.0), built on 2026-11-20. It has 211
 automated tests (2 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

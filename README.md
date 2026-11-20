@@ -9,7 +9,7 @@ deleted. At commit time it writes down how the change was verified.
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
   [website](https://scottconverse.github.io/verdictlite/manual.html))
-- Version: 0.1.11. Early stage. See [Status](#status).
+- Version: 0.1.12. Early stage. See [Status](#status).
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic.
@@ -388,7 +388,8 @@ you remove a test, write down why. The check runs inside the stop check, on
 added and removed lines of files in `tests.paths`. It flags:
 
 - added skip markers, such as `@pytest.mark.skip`, `xfail`, `it.skip`,
-  `test.skip`, `xit(` and `test.fixme`;
+  `test.skip`, `xit(` and `test.fixme` (a skip whose only condition is the
+  operating system, such as `skipif(os.name != "nt")`, is allowed);
 - added fixed waits, such as `time.sleep(`, `asyncio.sleep(` and
   `waitForTimeout(`;
 - added retries, such as `@flaky`, `--reruns`, `jest.retryTimes(` or a raised
@@ -545,7 +546,7 @@ Delete the folder to reset VerdictLite for a repo.
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
 - **The config must be on `origin/main` or `main`.** A default branch with
-  another name, such as `master`, is not searched in 0.1.11.
+  another name, such as `master`, is not searched in 0.1.12.
 - **`vlite review` sends your diff** to the review command you set (by default
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
@@ -553,14 +554,14 @@ Delete the folder to reset VerdictLite for a repo.
 - **Hook format.** The stop check depends on Claude Code's Stop hook output
   format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
   VerdictLite must change too.
-- **Hook managers.** 0.1.11 has not been tested with specific git hook managers.
+- **Hook managers.** 0.1.12 has not been tested with specific git hook managers.
 
 ## Status
 
-Early. Version 0.1.11 is the eleventh fix to the first release (0.1.0), built on 2026-11-19. It is being set
+Early. Version 0.1.12 is the twelfth fix to the first release (0.1.0), built on 2026-11-20. It is being set
 up on its first real repo now. Expect changes.
 
-- 192 automated tests (2 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
+- 211 automated tests (2 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 
