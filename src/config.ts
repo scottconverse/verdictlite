@@ -6,6 +6,8 @@ import { PLACEHOLDER } from './glob.js';
 export interface Check {
   name: string;
   run: string;
+  /** Optional narrow form: like run, with {files} for the changed test files. Used only when just tests changed since the part last passed. */
+  runFiles?: string;
   cwd: string;
   timeoutSec: number;
 }
@@ -42,6 +44,9 @@ export interface LoadedConfig {
   source: 'base' | 'worktree';
   ref: string | null;
 }
+
+/** Where the changed test files go in a check's runFiles. */
+export const FILES_TOKEN = '{files}';
 
 export class ConfigError extends Error {}
 
@@ -134,6 +139,7 @@ function placeholderRules(p: { name: string; paths: string[]; requires: string[]
   if (p.requires.some((r) => r.includes(PLACEHOLDER))) uses.push('"requires"');
   p.checks.forEach((c, i) => {
     if (c.run.includes(PLACEHOLDER)) uses.push(`checks[${i}].run`);
+    if (c.runFiles?.includes(PLACEHOLDER)) uses.push(`checks[${i}].runFiles`);
     if (c.cwd.includes(PLACEHOLDER) && c.cwd !== p.cwd) uses.push(`checks[${i}].cwd`);
   });
   if (!template) {
@@ -159,9 +165,15 @@ function checks(v: unknown, at: string, errors: string[], cwd: string): Check[] 
       errors.push(`${here} must be an object`);
       return { name: '', run: '', cwd, timeoutSec: 600 };
     }
+    let runFiles: string | undefined;
+    if (c['runFiles'] !== undefined) {
+      runFiles = str(c['runFiles'], `${here}.runFiles`, errors);
+      if (runFiles !== '' && !runFiles.includes(FILES_TOKEN)) errors.push(`${here}.runFiles must contain ${FILES_TOKEN}, where the changed test files go (for example "pytest ${FILES_TOKEN} -q")`);
+    }
     return {
       name: str(c['name'], `${here}.name`, errors),
       run: str(c['run'], `${here}.run`, errors),
+      ...(runFiles ? { runFiles } : {}),
       cwd: str(c['cwd'], `${here}.cwd`, errors, cwd),
       timeoutSec: posNum(c['timeoutSec'], `${here}.timeoutSec`, errors, 600),
     };

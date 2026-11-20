@@ -14,6 +14,8 @@ export interface State {
   lastPassTree?: Record<string, string>;
   /** HEAD commit at each pass, per key. A start point is reused only when this commit is still in HEAD's history. */
   lastPassHead?: Record<string, string>;
+  /** Per branch key, per concrete part name: the tree at which all of that part's checks last passed. Missing in older state. */
+  partPassTree?: Record<string, Record<string, string>>;
   rounds: Record<string, number>;
   pending: Record<string, Pending>;
   blocks: string[];

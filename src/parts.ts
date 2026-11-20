@@ -40,7 +40,7 @@ export function expandPart(part: Part, value: string): Part {
     paths: part.paths.map(fill),
     requires: part.requires.map(fill),
     cwd: fill(part.cwd),
-    checks: part.checks.map((c) => ({ ...c, run: fill(c.run), cwd: fill(c.cwd) })),
+    checks: part.checks.map((c) => ({ ...c, run: fill(c.run), ...(c.runFiles ? { runFiles: fill(c.runFiles) } : {}), cwd: fill(c.cwd) })),
     template: false,
   };
 }
