@@ -825,6 +825,7 @@ one-line warning.
 | `parts[].checks` | list | required, at least one | The checks, run in order. |
 | `checks[].name` | string | required | Check name. |
 | `checks[].run` | string | required | Command line. Runs through the shell: `cmd.exe` on Windows, `sh` elsewhere. |
+| `checks[].runFiles` | string | none | Optional narrow form of `run`. Must contain `{files}`. Used when only test files changed since the part last passed. See [rerun only the tests that changed](#how-to-rerun-only-the-tests-that-changed). |
 | `checks[].cwd` | string | the part's `cwd` | Folder for this check. |
 | `checks[].timeoutSec` | number | `600` | Seconds before the check is killed and counts as failed. |
 | `tests.paths` | list of globs | `[]` | Test files for the tamper check. |
@@ -922,6 +923,33 @@ template runs only the tests of the module that changed:
   `"skipped": {"backend:foo": "requires missing: tests/foo"}`.
 - A file right in `civiccast/` is in no module, so this part does not run for
   it. Add a plain part for those files if they need checks.
+
+### How to: rerun only the tests that changed
+
+A stop check normally reruns every check of every changed part. When an agent
+only fixes a few test files, that can mean the whole test suite on every turn.
+A check can opt in to a narrow form with `runFiles`:
+
+```json
+{ "name": "tests",
+  "run": "uv run --no-sync pytest tests/{name} -q -x",
+  "runFiles": "uv run --no-sync pytest {files} -q -x" }
+```
+
+- `runFiles` must contain `{files}`. A config without it is an error. In a
+  template part, `{name}` is filled as in `run`.
+- The narrow form runs only when this part's checks all passed on an earlier
+  stop, and since then every changed file in the part is a test file
+  (`tests.paths`) or a docs file, with at least one test file. If any product
+  file in the part changed, the checks run as before.
+- `{files}` becomes the changed test files that still exist, each quoted, as
+  paths from the check's folder. A deleted test file is listed as "deleted, not
+  run". If every changed test file was deleted, the check runs in full.
+- A check with no `runFiles` runs in full, and the message says so in one line.
+- The message names the test files that ran. A block says the rest of the
+  part's tests were skipped because product code is unchanged since the last
+  pass of that part. `stop.jsonl` has `narrow` and `deleted`.
+- The test-tamper check and the round count work as before.
 
 ## 16. Command reference
 

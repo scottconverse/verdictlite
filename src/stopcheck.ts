@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { allDocs, type Ctx, openRepo } from './context.js';
+import { join, relative, resolve } from 'node:path';
+import { FILES_TOKEN as FILES, type Part } from './config.js';
+import { allDocs, type Ctx, isDocs, openRepo } from './context.js';
 import { matchAny } from './glob.js';
 import { baseTree, changedFiles, diffText, git, headSha, isAncestorOfHead, isTree, repoRoot, stateKey, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
-import { lastLines, runShell } from './proc.js';
+import { lastLines, quoteArg, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
 import { originOwner, readSettings } from './settings.js';
 import { writeStamp } from './stamp.js';
@@ -27,6 +28,41 @@ interface Failure {
   code: number | null;
   timedOut: boolean;
   output: string;
+  /** Set when only the changed test files were run instead of the whole check. */
+  narrow?: { files: string[]; deleted: string[]; since: string };
+}
+
+/** How one part will run: its changed test files since the part last passed, or the reason it runs in full. */
+interface NarrowPlan {
+  files: string[]; // changed test files that still exist
+  deleted: string[]; // changed test files that are gone
+  since: string; // the tree at which the part last passed
+}
+
+
+/**
+ * Narrow mode for one concrete part: only when the part passed before (tree P), and since P only test files and docs
+ * changed in the part's paths, with at least one test file. Returns null (run as today) otherwise, and a note when
+ * the person should be told why the narrow form was not used.
+ */
+function planNarrow(ctx: Ctx, part: Part, since: string | undefined, tree: string): { plan: NarrowPlan | null; note?: string } {
+  const { root, config } = ctx;
+  if (!since || since === tree || !isTree(root, since)) return { plan: null };
+  const inPart = changedFiles(root, since, tree).filter((f) => matchAny(part.paths, f));
+  const tests = inPart.filter((f) => matchAny(config.tests.paths, f));
+  if (tests.length === 0) return { plan: null };
+  if (inPart.some((f) => !matchAny(config.tests.paths, f) && !isDocs(config, f))) return { plan: null };
+  const files = tests.filter((f) => existsSync(resolve(root, f)));
+  const deleted = tests.filter((f) => !existsSync(resolve(root, f)));
+  if (files.length === 0) return { plan: null, note: `VerdictLite: ${part.name}: every changed test file was deleted (${deleted.join(', ')}), so the part ran in full.` };
+  return { plan: { files, deleted, since } };
+}
+
+/** The check's runFiles with {files} replaced by the quoted test files, as paths from the check's folder. */
+function narrowCommand(root: string, cwd: string, runFiles: string, files: string[]): string {
+  const base = resolve(root, cwd);
+  const args = files.map((f) => quoteArg(relative(base, resolve(root, f)).replace(/\\/g, '/')));
+  return runFiles.split(FILES).join(args.join(' '));
 }
 
 function readHookInput(): HookInput {
@@ -216,6 +252,10 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
 
   const ran: string[] = [];
   const skipped: Record<string, string> = {};
+  const narrowRuns: Record<string, string[]> = {};
+  const deletedFiles: string[] = [];
+  const notes: string[] = [];
+  const passedParts: string[] = [];
   const plan = planParts(config.parts, changed, config.maxExpandedParts);
   // Too many modules for a template is not a failure (the agent cannot fix it): its parts do not run, and the person is told.
   const tooManyMessage = (t: { template: string; names: string[] }, otherPassed: boolean): string =>
@@ -227,20 +267,52 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       skipped[part.name] = `requires missing: ${missing.join(', ')}`;
       continue;
     }
+    const { plan: narrow, note } = planNarrow(ctx, part, state.partPassTree?.[branch]?.[part.name], tree);
+    if (note) notes.push(note);
+    if (narrow && narrow.deleted.length > 0) deletedFiles.push(...narrow.deleted.map((d) => `${d} (deleted, not run)`));
+    let allPassed = true;
     for (const check of part.checks) {
       const name = `${part.name}/${check.name}`;
       ran.push(name);
-      const r = await runShell(check.run, resolve(root, check.cwd), check.timeoutSec);
+      let command = check.run;
+      let used: Failure['narrow'];
+      if (narrow && check.runFiles) {
+        command = narrowCommand(root, check.cwd, check.runFiles, narrow.files);
+        used = { files: narrow.files, deleted: narrow.deleted, since: narrow.since };
+        narrowRuns[name] = narrow.files;
+      } else if (narrow) {
+        notes.push(`VerdictLite: ${name} has no "runFiles", so it ran in full.`);
+      }
+      const r = await runShell(command, resolve(root, check.cwd), check.timeoutSec);
       if (r.code === 0 && !r.timedOut) continue;
-      failures.push({ check: name, command: check.run, code: r.code, timedOut: r.timedOut, output: r.output });
+      failures.push({ check: name, command, code: r.code, timedOut: r.timedOut, output: r.output, ...(used ? { narrow: used } : {}) });
+      allPassed = false;
       break; // first failing check per part; other parts still run
     }
+    if (allPassed) passedParts.push(part.name);
+  }
+  // A part that passed is remembered even when another part failed in this run.
+  if (passedParts.length > 0) {
+    saveState(ctx.stateDir, (s) => {
+      s.partPassTree = { ...s.partPassTree, [branch]: { ...s.partPassTree?.[branch], ...Object.fromEntries(passedParts.map((p) => [p, tree])) } };
+    });
   }
 
-  const extra = Object.keys(skipped).length > 0 ? { skipped } : {};
+  const extra = {
+    ...(Object.keys(skipped).length > 0 ? { skipped } : {}),
+    ...(Object.keys(narrowRuns).length > 0 ? { narrow: narrowRuns, deleted: deletedFiles } : {}),
+    ...(notes.length > 0 ? { notes } : {}),
+  };
+  // What ran narrow or in full, one line each, so the person sees it.
+  const info = [
+    ...Object.entries(narrowRuns).map(([n, files]) => `VerdictLite: ${n} ran only the changed test files (${files.join(', ')}), because product code is unchanged since the last pass of its part.`),
+    ...deletedFiles.map((d) => `VerdictLite: ${d}`),
+    ...notes,
+  ];
   if (failures.length === 0) {
     pass({ ran, ...extra });
-    if (plan.tooMany.length > 0) return { kind: 'warn', message: plan.tooMany.map((t) => tooManyMessage(t, true)).join('\n') };
+    const lines = [...plan.tooMany.map((t) => tooManyMessage(t, true)), ...info];
+    if (lines.length > 0) return { kind: 'warn', message: lines.join('\n') };
     return { kind: 'pass' };
   }
 
@@ -263,6 +335,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       `Full output: ${logPath}`,
       `Round ${round} of ${config.maxRounds}. Fix the cause. Do not skip, sleep or rerun to pass.`,
       ...plan.tooMany.map((t) => tooManyMessage(t, false)),
+      ...(info.length > 0 ? [info.join('\n')] : []),
     ].join('\n\n');
     ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, ...extra, log: logPath });
     return { kind: 'block', reason };
@@ -282,7 +355,10 @@ function commitTree(root: string, head: string): string | null {
 
 function describe(f: Failure): string {
   const status = f.timedOut ? 'timed out' : `exit code ${String(f.code)}`;
-  return `[${f.check}] failed\ncommand: ${f.command}\n${status}\nlast lines of output:\n${lastLines(f.output, 60)}`;
+  const narrow = f.narrow
+    ? `\nOnly these test files ran: ${f.narrow.files.join(', ')}.${f.narrow.deleted.length > 0 ? ` Deleted, not run: ${f.narrow.deleted.join(', ')}.` : ''} The rest of the part's tests were skipped because product code is unchanged since the last pass of this part (tree ${f.narrow.since.slice(0, 8)}).`
+    : '';
+  return `[${f.check}] failed\ncommand: ${f.command}\n${status}${narrow}\nlast lines of output:\n${lastLines(f.output, 60)}`;
 }
 
 /** Writes the full output (the handoff file a person reads) and returns its path. */
