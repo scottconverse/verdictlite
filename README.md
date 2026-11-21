@@ -607,7 +607,7 @@ Delete the folder to reset VerdictLite for a repo.
 Early. Version 0.1.13 is the thirteenth fix to the first release (0.1.0), built on 2026-11-21. It is being set
 up on its first real repo now. Expect changes.
 
-- 238 automated tests (4 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
+- 240 automated tests (4 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 
