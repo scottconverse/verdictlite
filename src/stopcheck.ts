@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import { FILES_TOKEN as FILES, type Part } from './config.js';
 import { allDocs, type Ctx, isDocs, openRepo } from './context.js';
 import { matchAny } from './glob.js';
-import { baseTree, changedFiles, diffText, git, headSha, isAncestorOfHead, isTree, repoRoot, stateKey, worktreeTree } from './git.js';
+import { baseTree, changedFiles, diffText, existsAt, git, headSha, isAncestorOfHead, isTree, repoRoot, stateKey, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
 import { lastLines, quoteArg, runShell } from './proc.js';
 import { editedFiles, hasProjectHook, readSessionRoots, rootOf, writeSessionRoots } from './scope.js';
@@ -26,7 +26,6 @@ interface Failure {
   check: string; // "part/check"
   command: string;
   code: number | null;
-  timedOut: boolean;
   output: string;
   /** Set when only the changed test files were run instead of the whole check. */
   narrow?: { files: string[]; deleted: string[]; since: string };
@@ -42,7 +41,8 @@ interface NarrowPlan {
 
 /**
  * Narrow mode for one concrete part: only when the part passed before (tree P), and since P only test files and docs
- * changed in the part's paths, with at least one test file. Returns null (run as today) otherwise, and a note when
+ * changed in the part's paths, with at least one test file. Every changed file under tests.paths must be a real test
+ * file (tests.files); a helper, fixture or conftest.py forces the full check. Returns null (run as today) otherwise, and a note when
  * the person should be told why the narrow form was not used.
  */
 function planNarrow(ctx: Ctx, part: Part, since: string | undefined, tree: string): { plan: NarrowPlan | null; note?: string } {
@@ -51,6 +51,7 @@ function planNarrow(ctx: Ctx, part: Part, since: string | undefined, tree: strin
   const inPart = changedFiles(root, since, tree).filter((f) => matchAny(part.paths, f));
   const tests = inPart.filter((f) => matchAny(config.tests.paths, f));
   if (tests.length === 0) return { plan: null };
+  if (tests.some((f) => !matchAny(config.tests.files, f))) return { plan: null };
   if (inPart.some((f) => !matchAny(config.tests.paths, f) && !isDocs(config, f))) return { plan: null };
   const files = tests.filter((f) => existsSync(resolve(root, f)));
   const deleted = tests.filter((f) => !existsSync(resolve(root, f)));
@@ -223,15 +224,16 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     saveState(ctx.stateDir, (s) => {
       s.lastPassTree = { ...s.lastPassTree, [branch]: tree };
       if (head) s.lastPassHead = { ...s.lastPassHead, [branch]: head };
-      for (const k of Object.keys(s.rounds)) if (k.startsWith(`${session}|`)) delete s.rounds[k];
+      // This session's rounds on this branch, and its old-format keys (one key per set of failing checks).
+      for (const k of Object.keys(s.rounds)) if (k === roundKey(session, branch) || (k.startsWith(`${session}|`) && !k.startsWith(`${session}|branch:`))) delete s.rounds[k];
     });
     ctx.log('stop', { ...base, result: 'pass', ...extra });
     // A pass on this exact tree counts as proof at commit, but only when a check really ran and no part was skipped.
     // A failed stamp write never turns a pass into an error.
-    const e = extra as { ran?: string[]; skipped?: object };
+    const e = extra as { ran?: string[]; skipped?: object; narrow?: object };
     if (!e.ran || e.ran.length === 0 || e.skipped) return;
     try {
-      writeStamp(ctx, 'stop-check', 'pass', [], 'stop-check pass', tree);
+      writeStamp(ctx, 'stop-check', 'pass', [], e.narrow ? 'stop-check pass (narrow: only changed test files ran)' : 'stop-check pass', tree);
     } catch (e) {
       process.stderr.write(`VerdictLite: could not write stop-check stamp (ignored): ${(e as Error).message}
 `);
@@ -247,7 +249,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const tamperFiles = [...config.tests.paths, ...RETRY_CONFIG_FILES];
   if (changed.some((f) => matchAny(tamperFiles, f))) {
     const hits = detectTamper(parseDiff(diffText(root, from, tree, 0)), config.tests.paths, config.tests.removalsLog);
-    if (hits.length > 0) failures.push({ check: 'test-tamper', command: '(built-in)', code: 1, timedOut: false, output: formatHits(hits) });
+    if (hits.length > 0) failures.push({ check: 'test-tamper', command: '(built-in)', code: 1, output: formatHits(hits) });
   }
 
   const ran: string[] = [];
@@ -256,6 +258,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const deletedFiles: string[] = [];
   const notes: string[] = [];
   const passedParts: string[] = [];
+  const timeouts: { check: string; seconds: number }[] = [];
   const plan = planParts(config.parts, changed, config.maxExpandedParts);
   // Too many modules for a template is not a failure (the agent cannot fix it): its parts do not run, and the person is told.
   const tooManyMessage = (t: { template: string; names: string[] }, otherPassed: boolean): string =>
@@ -264,7 +267,19 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   for (const part of plan.parts) {
     const missing = part.requires.filter((p) => !existsSync(resolve(root, p)));
     if (missing.length > 0) {
+      // A path that the base branch has but the change removed is a failure: deleting it must not skip the checks.
+      const deleted = ctx.base ? missing.filter((p) => existsAt(root, ctx.base as string, p)) : [];
+      if (deleted.length > 0) {
+        failures.push({
+          check: `${part.name}/requires`,
+          command: '(built-in)',
+          code: 1,
+          output: `The change deleted a required path: ${deleted.join(', ')}. The base branch (${ctx.base}) has it, and the checks of part "${part.name}" need it. Restore it; do not delete a path to skip checks.`,
+        });
+        continue;
+      }
       skipped[part.name] = `requires missing: ${missing.join(', ')}`;
+      notes.push(`VerdictLite: part "${part.name}" was skipped, so its checks did NOT run: required path missing (${missing.join(', ')}) and not on the base branch either.`);
       continue;
     }
     const { plan: narrow, note } = planNarrow(ctx, part, state.partPassTree?.[branch]?.[part.name], tree);
@@ -285,8 +300,10 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       }
       const r = await runShell(command, resolve(root, check.cwd), check.timeoutSec);
       if (r.code === 0 && !r.timedOut) continue;
-      failures.push({ check: name, command, code: r.code, timedOut: r.timedOut, output: r.output, ...(used ? { narrow: used } : {}) });
       allPassed = false;
+      // A frozen check says nothing about the code: it is no result, not a failure. The part is not marked passed.
+      if (r.timedOut) timeouts.push({ check: name, seconds: check.timeoutSec });
+      else failures.push({ check: name, command, code: r.code, output: r.output, ...(used ? { narrow: used } : {}) });
       break; // first failing check per part; other parts still run
     }
     if (allPassed) passedParts.push(part.name);
@@ -309,6 +326,11 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     ...deletedFiles.map((d) => `VerdictLite: ${d}`),
     ...notes,
   ];
+  const timeoutWarnings = timeouts.map((t) => `VerdictLite: ${t.check} froze: no answer after ${t.seconds} s, so it was stopped. The result is unknown; it is not a failure and not a pass. You can continue.`);
+  if (failures.length === 0 && timeouts.length > 0) {
+    ctx.log('stop', { ...base, result: 'no-result', ran, timedOut: timeouts.map((t) => t.check), ...extra });
+    return { kind: 'warn', message: [...timeoutWarnings, ...plan.tooMany.map((t) => tooManyMessage(t, true)), ...info].join('\n') };
+  }
   if (failures.length === 0) {
     pass({ ran, ...extra });
     const lines = [...plan.tooMany.map((t) => tooManyMessage(t, true)), ...info];
@@ -316,7 +338,8 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     return { kind: 'pass' };
   }
 
-  const key = `${session}|${failures.map((f) => f.check).sort().join(',')}`;
+  // Rounds count per session and branch, not per set of failing checks, so failures that take turns still reach maxRounds.
+  const key = roundKey(session, branch);
   let round = (state.rounds[key] ?? 0) + 1;
   const saved = saveState(ctx.stateDir, (s) => {
     round = (s.rounds[key] ?? 0) + 1;
@@ -336,15 +359,21 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
       `Round ${round} of ${config.maxRounds}. Fix the cause. Do not skip, sleep or rerun to pass.`,
       ...plan.tooMany.map((t) => tooManyMessage(t, false)),
       ...(info.length > 0 ? [info.join('\n')] : []),
+      ...timeoutWarnings,
     ].join('\n\n');
     ctx.log('stop', { ...base, result: 'block', round, failing: names, ran, ...extra, log: logPath });
     return { kind: 'block', reason };
   }
   const first = failures[0] as Failure;
-  const why = first.timedOut ? 'it timed out' : `exit code ${String(first.code)}`;
-  const stopReason = `VerdictLite: ${names.join(', ')} still fails after ${round} rounds. A person must look. Last failure: ${why}. Handoff: ${logPath}`;
+  const why = `exit code ${String(first.code)}`;
+  const stopReason = `VerdictLite: ${names.join(', ')} still fails after ${round} rounds. A person must look. Last failure: ${why}. Handoff: ${logPath}${timeoutWarnings.length > 0 ? `\n${timeoutWarnings.join('\n')}` : ''}`;
   ctx.log('stop', { ...base, result: 'handoff', round, failing: names, ran, ...extra, handoff: logPath });
   return { kind: 'handoff', stopReason };
+}
+
+/** State key for the rounds of one session on one branch. Older state used the failing checks here; those keys are ignored and cleared on a pass. */
+function roundKey(session: string, branch: string): string {
+  return `${session}|branch:${branch}`;
 }
 
 /** Tree of a commit. */
@@ -354,7 +383,7 @@ function commitTree(root: string, head: string): string | null {
 }
 
 function describe(f: Failure): string {
-  const status = f.timedOut ? 'timed out' : `exit code ${String(f.code)}`;
+  const status = `exit code ${String(f.code)}`;
   const narrow = f.narrow
     ? `\nOnly these test files ran: ${f.narrow.files.join(', ')}.${f.narrow.deleted.length > 0 ? ` Deleted, not run: ${f.narrow.deleted.join(', ')}.` : ''} The rest of the part's tests were skipped because product code is unchanged since the last pass of this part (tree ${f.narrow.since.slice(0, 8)}).`
     : '';
@@ -371,7 +400,7 @@ function writeLogs(ctx: Ctx, failures: Failure[], changed: string[], round: numb
     `VerdictLite handoff, round ${round} of ${ctx.config.maxRounds}`,
     `Repo: ${ctx.root}`,
     `Changed files (${changed.length}):\n${changed.slice(0, 200).join('\n')}`,
-    ...failures.map((f) => `===== ${f.check} =====\ncommand: ${f.command}\nexit code: ${String(f.code)}${f.timedOut ? ' (timed out)' : ''}\n\n${lastLines(f.output, 2000)}`),
+    ...failures.map((f) => `===== ${f.check} =====\ncommand: ${f.command}\nexit code: ${String(f.code)}\n\n${lastLines(f.output, 2000)}`),
   ].join('\n\n');
   writeFileSync(path, `${body}\n`);
   return path;

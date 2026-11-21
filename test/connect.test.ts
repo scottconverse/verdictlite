@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { connect } from '../src/connect.js';
+import { connect, HOOK_TIMEOUT_SEC } from '../src/connect.js';
 import { tempDir } from './root.js';
 
 const backups = (dir: string): string[] => readdirSync(dir).filter((f) => f.includes('.vlite-backup-'));
@@ -17,7 +17,8 @@ describe('connect', () => {
       expect(raw.endsWith('\n')).toBe(true);
       const hook = read(f).hooks.Stop[0].hooks[0];
       expect(hook.type).toBe('command');
-      expect(hook.timeout).toBe(2400);
+      expect(hook.timeout).toBe(HOOK_TIMEOUT_SEC);
+      expect(HOOK_TIMEOUT_SEC).toBe(3600);
       expect(hook.command).toMatch(/^node ".*cli\.js" stop-check --global$/);
       expect(hook.command).not.toContain('\\');
     }
@@ -114,5 +115,52 @@ describe('connect', () => {
     writeFileSync(file, JSON.stringify({ x: 1, hooks: { Stop: [ours] } }));
     connect({ ...h, apps: ['codex'], uninstall: true });
     expect(read(file)).toEqual({ x: 1 });
+  });
+});
+
+describe('connect repair (finding 007)', () => {
+  it('updates our own entry when its command or timeout is stale, with a backup, and says so', () => {
+    const h = homes();
+    const file = join(h.claudeHome, 'settings.json');
+    const other = { hooks: [{ type: 'command', command: 'echo keep' }] };
+    const stale = { hooks: [{ type: 'command', command: 'node "C:/moved/gone/dist/cli.js" stop-check --global', timeout: 2400 }] };
+    writeFileSync(file, JSON.stringify({ theme: 'dark', hooks: { Stop: [other, stale] } }));
+    const notes = connect({ ...h, apps: ['claude'] }).join('\n');
+    expect(notes).toContain('updated the VerdictLite hook');
+    expect(notes).toContain('C:/moved/gone/dist/cli.js');
+    const doc = read(file);
+    expect(doc.theme).toBe('dark');
+    expect(doc.hooks.Stop[0]).toEqual(other);
+    const hook = doc.hooks.Stop[1].hooks[0];
+    expect(hook.command).toMatch(/^node ".*cli\.js" stop-check --global$/);
+    expect(hook.command).not.toContain('C:/moved/gone');
+    expect(hook.timeout).toBe(HOOK_TIMEOUT_SEC);
+    const b = backups(h.claudeHome);
+    expect(b).toHaveLength(1);
+    expect(read(join(h.claudeHome, b[0] as string)).hooks.Stop[1].hooks[0].command).toContain('C:/moved/gone');
+  });
+
+  it('after a repair it reports "already connected" without another backup', () => {
+    const h = homes();
+    const file = join(h.claudeHome, 'settings.json');
+    const stale = { hooks: [{ type: 'command', command: 'node "C:/old/dist/cli.js" stop-check --global', timeout: HOOK_TIMEOUT_SEC }] };
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [stale] } }));
+    expect(connect({ ...h, apps: ['claude'] }).join('\n')).toContain('updated the VerdictLite hook');
+    expect(read(file).hooks.Stop[0].hooks[0].timeout).toBe(HOOK_TIMEOUT_SEC);
+    expect(backups(h.claudeHome)).toHaveLength(1);
+    const before = readFileSync(file, 'utf8');
+    expect(connect({ ...h, apps: ['claude'] }).join('\n')).toContain('already connected');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(backups(h.claudeHome)).toHaveLength(1);
+  });
+
+  it('leaves a custom command that is not ours untouched', () => {
+    const h = homes();
+    const file = join(h.claudeHome, 'settings.json');
+    const text = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'my-tool stop-check --global', timeout: 10 }] }] } });
+    writeFileSync(file, text);
+    expect(connect({ ...h, apps: ['claude'] }).join('\n')).toContain('already connected');
+    expect(readFileSync(file, 'utf8')).toBe(text);
+    expect(backups(h.claudeHome)).toHaveLength(0);
   });
 });

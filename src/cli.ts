@@ -5,7 +5,7 @@ import { type Ctx, openRepo } from './context.js';
 import { commitMsg, preCommit, report } from './gate.js';
 import { repoRoot } from './git.js';
 import { connect } from './connect.js';
-import { claudeSnippet, install } from './install.js';
+import { claudeSnippet, hookTimeoutWarning, install } from './install.js';
 import { review } from './review.js';
 import { readSettings, writeSettings } from './settings.js';
 import { type Method, UsageError, writeStamp } from './stamp.js';
@@ -99,6 +99,8 @@ async function main(argv: string[]): Promise<number> {
     const root = repoRoot(dir);
     if (!root) throw new UsageError(`not a git repo: ${dir}`);
     for (const n of install(root, args.flags.has('uninstall'))) process.stdout.write(`${n}\n`);
+    const timeoutWarning = args.flags.has('uninstall') ? null : hookTimeoutWarning(root);
+    if (timeoutWarning) process.stdout.write(`${timeoutWarning}\n`);
     if (args.flags.has('claude') && !args.flags.has('uninstall')) process.stdout.write(`\n${claudeSnippet()}\n`);
     return 0;
   }

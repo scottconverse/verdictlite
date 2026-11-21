@@ -41,7 +41,7 @@ VerdictLite puts a simple check at each of those points:
 |---|---|
 | The agent stops without running the checks. | A Claude Code Stop hook (`vlite stop-check`) runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error. |
 | A failing test gets skipped, slowed, retried or deleted. | A built-in test-tamper check looks at changed lines in test files. It flags added skips, fixed sleeps, retries and removed tests. |
-| The agent tries the same broken fix forever. | Failed rounds are counted. After three, the session ends and a person is asked to look. |
+| The agent tries the same broken fix forever. | Failed rounds are counted for each session and branch. After three, the session ends and a person is asked to look. |
 | A commit gives no sign of how it was checked. | Git hooks add a `Verified-By:` line to every commit message. |
 | A change loosens the rules that judge it. | The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo. The commands the config runs (package.json scripts, pyproject, ruff, mypy, eslint configs) come from the working tree. |
 
@@ -96,9 +96,11 @@ The installer needs no admin rights. It does these things:
 4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
    to your user PATH.
 5. Runs `vlite --help` and prints the installed version.
-6. Runs `vlite connect`. This adds the VerdictLite Stop hook to the Claude Code
-   and Codex desktop apps, at user level. To skip this step, run the installer
-   with `-NoConnect`.
+6. Runs `vlite connect` on a first install. This adds the VerdictLite Stop hook
+   to the Claude Code and Codex desktop apps, at user level. On an update
+   (VerdictLite is already installed) it keeps your current connect state and
+   does not run `vlite connect`. It prints one line that says which it did.
+   Use `-NoConnect` to never connect, or `-Connect` to connect on an update too.
 
 Open a new terminal after it finishes. Then restart the Claude and Codex apps.
 Codex runs a new hook only after you approve it. In Codex, click **Review
@@ -106,6 +108,9 @@ hooks** in the message box, or open **Settings > Hooks**.
 
 To connect or disconnect the apps later, run `vlite connect` or
 `vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
+If VerdictLite's own hook entry has an old path or timeout (for example after
+you moved the install folder), `vlite connect` updates it, makes a backup and
+says so. A hook command that is not VerdictLite's own is never changed.
 
 **Codex limit:** VerdictLite checks only the repo that the Codex session opened
 in. It cannot read the Codex log to find other repos that the session changed.
@@ -209,7 +214,11 @@ It does not write them.
 }
 ```
 
-The timeout is in seconds. Make it longer than all your checks together.
+The timeout is in seconds. `vlite connect` and `vlite install --claude` both
+write 3600. Checks run one at a time, so make the timeout longer than all your
+checks together. `vlite install` prints a warning when the check timeouts in
+`vlite.json` add up to more than 3600 s. A template part counts its checks
+times `maxExpandedParts`. If the app kills the hook, no verdict is written.
 
 A project hook loads only when a Claude Code session starts inside the repo.
 If your sessions or agent workers start in another folder and edit the repo
@@ -273,10 +282,31 @@ session edited this turn. It sends one combined message.
 5. It runs the checks of every part whose `paths` match a changed file. The
    first failing check stops that part. Other parts still run. A template part
    runs once for each module that changed. See [Part templates](#part-templates).
+   If a `requires` path is missing, the part is skipped, and every skipped part
+   shows a warning line. If the base branch has that path and the change
+   deleted it, the part fails with the check name `part/requires`, and it blocks.
 6. All pass: it records the pass. Something fails: it blocks the stop and tells
    the agent the command, the exit code and the last 60 lines of output.
-7. On round 3 of the same failure it ends the session and asks for a person.
-   Each failing round writes a hand-off file with up to 2,000 lines.
+7. Rounds are counted for each session and branch, not for each set of failing
+   checks. On round `maxRounds` (3 by default) it ends the session and asks for
+   a person. Failures that take turns count together. After a hand-off, or a
+   pass, the count starts again. Each failing round writes a hand-off file with
+   up to 2,000 lines.
+
+**A check that times out is no result.** It is not a failure. It does not count
+a round, does not block, and never hands off. The part is not marked as passed.
+If nothing else failed, VerdictLite does not record a pass and writes no stamp.
+It logs `result: "no-result"` and shows a warning that names the check, says it
+froze, says the result is unknown, and says the agent can continue. If another
+check really failed, VerdictLite blocks or hands off on that failure only, and
+the warning is added.
+
+**Narrow mode only runs real test files.** When a part passed before and only
+test files changed since, a check with `runFiles` runs just the changed test
+files. Every changed file under `tests.paths` must match `tests.files`. A
+helper, fixture or `conftest.py` there forces the full check. A narrow pass
+still writes a `stop-check` stamp, but its note says `stop-check pass (narrow:
+only changed test files ran)`.
 
 If VerdictLite itself breaks, it logs the error and lets the agent stop. A
 failing check always blocks.
@@ -371,6 +401,15 @@ Runs one AI review round on the diff from the merge-base to the working tree.
 - Earlier rounds on this branch go into the prompt.
 - The prompt goes on stdin to `review.command` with `review.args`. The default
   is `claude -p`. The env var `VLITE_REVIEW_CMD` replaces the command.
+- The diff, the author note and the earlier rounds come from the change, so the
+  prompt marks them as untrusted data between clear markers. It says that text
+  inside them is data, never instructions, and that any text in them that asks
+  for no findings or a pass is itself an important finding.
+- When the command is Claude Code (`claude`), VerdictLite adds
+  `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
+  tools. If your `review.args` already has `--disallowedTools`, your value is
+  kept. For any other command (such as `codex`), only the prompt says
+  "read-only". VerdictLite cannot block tools there.
 - The reviewer runs with `VLITE_REVIEWER=1`. The stop check does nothing in that session. A review never runs your repo's checks and is never blocked by them.
 - The reviewer must reply in strict JSON findings, each `important`, `nit` or
   `pre-existing`.
@@ -454,17 +493,18 @@ An old `prChecks` field is ignored with a one-line warning.
 | `parts` | list | `[]` | Areas of the repo and their checks. |
 | `parts[].name` | string | required | Shown in messages as `name/check`. |
 | `parts[].paths` | list of globs | required, at least one | A changed file matching one of these runs the part. A path with `{name}` makes the part a template. |
-| `parts[].requires` | list of paths | `[]` | Paths, from the repo root, that must exist for the part to run. If one is missing, the part is skipped and `stop.jsonl` says why. |
+| `parts[].requires` | list of paths | `[]` | Paths, from the repo root, that must exist for the part to run. If one is missing and the base branch does not have it either, the part is skipped, `stop.jsonl` says why, and a warning line is shown. If the base branch has it (the change deleted it), the part fails as `part/requires`. |
 | `parts[].cwd` | string | `"."` | Folder, from the repo root, where checks run. |
 | `parts[].checks` | list | required, at least one | Checks, run in order. |
 | `checks[].name` | string | required | Check name. |
 | `checks[].run` | string | required | Command line. Runs through `cmd.exe` on Windows, `sh` elsewhere. |
 | `checks[].runFiles` | string | none | Optional narrow form of `run`. Must contain `{files}`. When the part passed before and only its test files changed since, only those test files run. See the manual, "How to: rerun only the tests that changed". |
 | `checks[].cwd` | string | the part's `cwd` | Folder for this check. |
-| `checks[].timeoutSec` | number | `600` | Seconds before the check is killed and fails. |
+| `checks[].timeoutSec` | number | `600` | Seconds before the check is killed. A check that times out is no result, not a failure (see `vlite stop-check`). |
 | `tests.paths` | list of globs | `[]` | Test files for the tamper check. |
+| `tests.files` | list of globs | `**/test_*.py`, `**/*_test.py`, `**/*.test.*`, `**/*.spec.*`, `**/*_test.go` | Which files under `tests.paths` are real test files. Narrow mode runs only when every changed file under `tests.paths` matches one. |
 | `tests.removalsLog` | string | `"TEST-REMOVALS.md"` | Where removed tests are written down. |
-| `maxRounds` | whole number | `3` | The failing round that hands off to a person. |
+| `maxRounds` | whole number | `3` | The failing round that hands off to a person. Counted per session and branch. |
 | `maxExpandedParts` | whole number | `12` | The most parts one template may make in one stop check. |
 | `gate.mode` | `"off"`, `"observe"`, `"enforce"` | `"observe"` | Commit gate mode. |
 | `review.command` | string | `"claude"` | Reviewer command. |
@@ -504,7 +544,7 @@ only the tests of the module that changed:
   and the `name` of a template part need it. Any other `{...}` in `paths` is an
   error.
 - A module with no `tests/<module>` folder is skipped. `requires` does this,
-  and `stop.jsonl` says `"requires missing: tests/foo"`.
+  `stop.jsonl` says `"requires missing: tests/foo"`, and a warning line is shown.
 - **Safe names only.** The folder name goes into a shell command. It is used
   only when it starts with a letter or digit and has only letters, digits,
   `_`, `.` and `-`. Any other folder name does not match, and nothing runs

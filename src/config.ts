@@ -33,7 +33,7 @@ export interface Config {
   parts: Part[];
   /** Most concrete parts one template may make in one run. */
   maxExpandedParts: number;
-  tests: { paths: string[]; removalsLog: string };
+  tests: { paths: string[]; /** Globs of real test files. Narrow mode runs only when every changed file under paths matches one. */ files: string[]; removalsLog: string };
   maxRounds: number;
   gate: { mode: GateMode };
   review: { command: string; args: string[]; rulesFile: string; timeoutSec: number };
@@ -51,6 +51,9 @@ export const FILES_TOKEN = '{files}';
 export class ConfigError extends Error {}
 
 const FILE = 'vlite.json';
+/** Default globs for real test files (not helpers, fixtures or conftest.py). */
+export const DEFAULT_TEST_FILES = ['**/test_*.py', '**/*_test.py', '**/*.test.*', '**/*.spec.*', '**/*_test.go'];
+
 const DEFAULT_REFS = ['origin/main', 'main'];
 
 /**
@@ -231,6 +234,7 @@ function validate(raw: unknown, errors: string[]): Config | null {
     maxExpandedParts: typeof maxExpanded === 'number' ? maxExpanded : 12,
     tests: {
       paths: strings(tests['paths'], '"tests.paths"', errors, []),
+      files: strings(tests['files'], '"tests.files"', errors, DEFAULT_TEST_FILES),
       removalsLog: str(tests['removalsLog'], '"tests.removalsLog"', errors, 'TEST-REMOVALS.md'),
     },
     maxRounds: typeof maxRounds === 'number' ? maxRounds : 3,

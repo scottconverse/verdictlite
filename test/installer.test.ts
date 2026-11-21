@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -66,4 +66,52 @@ describe('install.ps1', () => {
     expect(r.out).toContain('1. Check Node.js');
     expect(existsSync(dir)).toBe(false);
   }, 30_000);
+});
+
+describe('install.ps1 connect on update (finding 003)', () => {
+  winOnly('connects on a first install, keeps the connect state on an update, and -Connect forces it', () => {
+    const pack = run(process.execPath, [join(ROOT, 'scripts', 'pack.mjs')]);
+    expect(pack.code, pack.out).toBe(0);
+    const zip = join(ROOT, 'release', 'verdictlite.zip');
+
+    // A temp profile, so vlite connect can never touch the real ~/.claude or ~/.codex.
+    const profile = tempDir('installer-profile-');
+    mkdirSync(join(profile, '.claude'));
+    mkdirSync(join(profile, '.codex'));
+    const env = { ...process.env, USERPROFILE: profile, HOME: profile, CODEX_HOME: join(profile, '.codex') };
+    const settings = join(profile, '.claude', 'settings.json');
+    const hookCount = (): number => (existsSync(settings) ? (JSON.parse(readFileSync(settings, 'utf8')) as { hooks?: { Stop?: unknown[] } }).hooks?.Stop?.length ?? 0 : 0);
+    const base = tempDir('installer-connect-');
+    const dir = join(base, 'app');
+    const go = (...extra: string[]): { code: number; out: string } => {
+      const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ZipPath', zip, '-InstallDir', dir, '-NoPath', ...extra], { cwd: ROOT, encoding: 'utf8', env });
+      return { code: r.status ?? -1, out: `${r.stdout}${r.stderr}` };
+    };
+
+    // First install: connects, and says so.
+    const first = go();
+    expect(first.code, first.out).toBe(0);
+    expect(first.out).toContain('First install: running vlite connect');
+    expect(hookCount()).toBe(1);
+
+    // The person removes the hook. An update must not put it back.
+    rmSync(settings);
+    const update = go();
+    expect(update.code, update.out).toBe(0);
+    expect(update.out).toContain('This is an update');
+    expect(update.out).toContain('did not run vlite connect');
+    expect(existsSync(settings)).toBe(false);
+
+    // -Connect forces it on an update.
+    const forced = go('-Connect');
+    expect(forced.code, forced.out).toBe(0);
+    expect(forced.out).toContain('-Connect: running vlite connect on an update');
+    expect(hookCount()).toBe(1);
+
+    // -NoConnect still skips it, and the two switches together are refused.
+    rmSync(settings);
+    expect(go('-NoConnect').out).toContain('-NoConnect');
+    expect(existsSync(settings)).toBe(false);
+    expect(go('-NoConnect', '-Connect').code).not.toBe(0);
+  }, 180_000);
 });

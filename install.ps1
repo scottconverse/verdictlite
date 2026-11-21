@@ -12,8 +12,9 @@
 #      because git hooks keep its path.
 #   4. Writes %LOCALAPPDATA%\VerdictLite\bin\vlite.cmd and adds that bin folder to your user PATH.
 #   5. Runs vlite --help to prove it works.
-#   6. Runs vlite connect. It adds the VerdictLite Stop hook to the Claude Code and Codex desktop apps
-#      (user level). Use -NoConnect to skip this.
+#   6. Runs vlite connect on a FIRST install. It adds the VerdictLite Stop hook to the Claude Code and Codex
+#      desktop apps (user level). On an update (VerdictLite is already installed) it keeps your current connect
+#      state and does not run vlite connect. Use -NoConnect to skip it always, or -Connect to force it.
 #
 # Nothing needs administrator rights. Runs on Windows PowerShell 5.1 and PowerShell 7.
 # Run it again at any time to update.
@@ -30,6 +31,8 @@ param(
     [switch]$NoPath,
     # Do not connect VerdictLite to the Claude Code and Codex desktop apps.
     [switch]$NoConnect,
+    # Run vlite connect even on an update. Without it, an update keeps the current connect state.
+    [switch]$Connect,
     # Print the steps and change nothing.
     [switch]$PlanOnly
 )
@@ -74,7 +77,7 @@ $steps = @(
     'Put the files in the install folder',
     'Write vlite.cmd and add its folder to the user PATH',
     'Run vlite --help to check it works',
-    'Connect VerdictLite to the Claude and Codex desktop apps'
+    'Connect VerdictLite to the Claude and Codex desktop apps (first install only; -Connect forces it on an update)'
 )
 if ($PlanOnly) {
     $i = 1
@@ -86,6 +89,9 @@ if ($Version) { $Base = "https://github.com/scottconverse/verdictlite/releases/d
 else { $Base = 'https://github.com/scottconverse/verdictlite/releases/latest/download' }
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $BinDir = Join-Path (Split-Path -Parent $InstallDir) 'bin'
+if ($NoConnect -and $Connect) { throw '-NoConnect and -Connect cannot be used together.' }
+# An update: VerdictLite is already installed. Decided here, before step 3 writes the new files.
+$isUpdate = Test-Path (Join-Path $InstallDir 'dist/cli.js')
 
 # 1. Node.js
 Step $steps[0]
@@ -194,7 +200,10 @@ Ok "VerdictLite $installed is installed"
 Step $steps[5]
 if ($NoConnect) {
     Note "-NoConnect: the Claude and Codex apps were not changed"
+} elseif ($isUpdate -and -not $Connect) {
+    Note "This is an update, so I kept your current connect state and did not run vlite connect. Use -Connect to connect."
 } else {
+    if ($isUpdate) { Note "-Connect: running vlite connect on an update" } else { Note "First install: running vlite connect" }
     # Read ALL the output first, for the same reason as above.
     $connectOut = @(& $cmdFile connect 2>&1)
     $connectCode = $LASTEXITCODE
