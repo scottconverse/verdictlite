@@ -10,6 +10,9 @@ export interface ConnectOpts {
   uninstall?: boolean;
 }
 
+/** Timeout, in seconds, of the Stop hook that `vlite connect` and `vlite install --claude` write. Checks run one at a time and must fit inside it. */
+export const HOOK_TIMEOUT_SEC = 3600;
+
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -29,7 +32,7 @@ function stamp(): string {
 }
 
 function snippet(command: string): string {
-  const doc = { hooks: { Stop: [{ hooks: [{ type: 'command', command, timeout: 2400 }] }] } };
+  const doc = { hooks: { Stop: [{ hooks: [{ type: 'command', command, timeout: HOOK_TIMEOUT_SEC }] }] } };
   return JSON.stringify(doc, null, 2);
 }
 
@@ -107,11 +110,26 @@ function connectOne(label: string, file: string, uninstall: boolean, command: st
     return notes;
   }
 
-  if (groups.some((g) => handlers(g)?.some((h) => isGlobalStop(h.command)))) {
-    notes.push(`${label}: already connected (${file})`);
+  const global = groups.flatMap((g) => handlers(g) ?? []).filter((h) => isGlobalStop(h.command));
+  if (global.length > 0) {
+    // Our own entry is repaired when its command or timeout differs from today's. A custom command that is not ours stays untouched.
+    const stale = global.filter((h) => isOurs(h.command) && (h.command !== command || h.timeout !== HOOK_TIMEOUT_SEC));
+    if (stale.length === 0) {
+      notes.push(`${label}: already connected (${file})`);
+      return notes;
+    }
+    const was = stale.map((h) => `command ${String(h.command)}, timeout ${String(h.timeout)}`).join('; ');
+    for (const h of stale) {
+      h.command = command;
+      h.timeout = HOOK_TIMEOUT_SEC;
+    }
+    const backup = `${file}.vlite-backup-${stamp()}`;
+    copyFileSync(file, backup);
+    writeAtomic(file, doc);
+    notes.push(`${label}: updated the VerdictLite hook in ${file} (was: ${was}; now: command ${command}, timeout ${HOOK_TIMEOUT_SEC}). Backup: ${backup}`);
     return notes;
   }
-  const group = { hooks: [{ type: 'command', command, timeout: 2400 }] };
+  const group = { hooks: [{ type: 'command', command, timeout: HOOK_TIMEOUT_SEC }] };
   const next: Json = { ...doc, hooks: { ...(isObj(hooks) ? hooks : {}), Stop: [...groups, group] } };
   mkdirSync(dirname(file), { recursive: true });
   if (exists) {

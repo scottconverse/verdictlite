@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { baseConfig, CHECK_SCRIPT, lastJson, makeRepo, type Repo } from './helpers.js';
@@ -119,14 +119,6 @@ describe('stop-check', () => {
     expect(stopLog(r).at(-1)?.['ran']).toEqual(['one/fail', 'two/ok']);
   });
 
-  it('fails a check that times out', () => {
-    const r = setup({ parts: [{ name: 'slow', paths: ['src/**'], checks: [{ name: 'hang', run: 'node -e "setInterval(()=>{},1000)"', timeoutSec: 1 }] }] });
-    r.write('src/app.js', 'x\n');
-    const reason = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason']);
-    expect(reason).toContain('[slow/hang] failed');
-    expect(reason).toContain('timed out');
-  });
-
   it('runs the built-in test-tamper check on changed test files', () => {
     const r = setup();
     r.write('tests/test_a.py', 'import pytest\n\n@pytest.mark.skip(reason="later")\ndef test_a():\n    assert True\n');
@@ -231,7 +223,10 @@ if (existsSync('pkg/' + name + '/FAIL')) { console.log('tests for ' + name + ' f
   it('skips a module whose required folder is missing and says so in the log', () => {
     const r = templated();
     r.write('pkg/gamma/z.py', 'c = 2\n');
-    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    const message = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['systemMessage']);
+    expect(message).toContain('part "mod:gamma" was skipped');
+    expect(message).toContain('did NOT run');
+    expect(message).toContain('tests/gamma');
     expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', ran: [], skipped: { 'mod:gamma': 'requires missing: tests/gamma' } });
     expect(ranLog(r)).toEqual([]);
   });
@@ -306,5 +301,123 @@ describe('stop-check on a detached HEAD', () => {
     // Only the worker's own edit counts, not the merged files.
     expect(last['changed']).toBe(1);
     expect(last['from']).toBe(r.git('rev-parse', 'main^{tree}'));
+  });
+});
+
+describe('stop-check timeouts (finding 001)', () => {
+  const hang = { name: 'slow', paths: ['src/**'], checks: [{ name: 'hang', run: 'node -e "setInterval(()=>{},1000)"', timeoutSec: 1 }] };
+
+  it('a check that times out is no result: no round, no block, no handoff, no pass, and a warning', () => {
+    const r = setup({ maxRounds: 2, parts: [hang] });
+    r.write('src/app.js', 'x\n');
+    for (let i = 0; i < 3; i++) {
+      const json = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+      expect(json['decision']).toBeUndefined();
+      expect(json['continue']).toBeUndefined();
+      const message = String(json['systemMessage']);
+      expect(message).toContain('slow/hang froze');
+      expect(message).toContain('result is unknown');
+      expect(message).toContain('You can continue');
+    }
+    expect(stopLog(r).map((x) => x['result'])).toEqual(['no-result', 'no-result', 'no-result']);
+    expect(stopLog(r).at(-1)).toMatchObject({ timedOut: ['slow/hang'] });
+    const stateFile = join(stateFolder(r), 'state.json');
+    const state = (existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : { rounds: {} }) as Record<string, unknown>;
+    expect(state['rounds']).toEqual({});
+    expect(state['lastPassTree']).toBeUndefined();
+    expect(state['partPassTree']).toBeUndefined();
+    expect(existsSync(join(stateFolder(r), 'stamps.jsonl'))).toBe(false);
+    expect(existsSync(join(stateFolder(r), 'handoffs'))).toBe(false);
+  }, 60_000);
+
+  it('a timeout next to a real failure: blocks and hands off on the real failure only, with the timeout warning', () => {
+    const r = setup({
+      maxRounds: 2,
+      parts: [hang, { name: 'app', paths: ['src/**'], checks: [{ name: 'check', run: 'node check.mjs', timeoutSec: 60 }] }],
+    });
+    r.write('src/app.js', 'BAD\n');
+    const one = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    expect(one['decision']).toBe('block');
+    const reason = String(one['reason']);
+    expect(reason).toContain('[app/check] failed');
+    expect(reason).not.toContain('[slow/hang] failed');
+    expect(reason).toContain('slow/hang froze');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'block', round: 1, failing: ['app/check'] });
+    const two = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    expect(two['continue']).toBe(false);
+    const stopReason = String(two['stopReason']);
+    expect(stopReason).toContain('app/check still fails after 2 rounds');
+    expect(stopReason).not.toContain('timed out');
+    expect(stopReason).toContain('slow/hang froze');
+  }, 60_000);
+});
+
+describe('stop-check requires (finding 004)', () => {
+  const parts = [{ name: 'app', paths: ['src/**'], requires: ['needed.txt'], checks: [{ name: 'check', run: 'node check.mjs', timeoutSec: 60 }] }];
+
+  it('deleting a required path that the base branch has is a failure, not a skip', () => {
+    const r = makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'BAD\n', 'needed.txt': 'x\n' }, baseConfig({ parts }));
+    r.write('src/app.js', 'BAD two\n');
+    rmSync(join(r.dir, 'needed.txt'));
+    const json = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    expect(json['decision']).toBe('block');
+    const reason = String(json['reason']);
+    expect(reason).toContain('[app/requires] failed');
+    expect(reason).toContain('deleted a required path: needed.txt');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'block', failing: ['app/requires'] });
+    expect(existsSync(join(stateFolder(r), 'stamps.jsonl'))).toBe(false);
+  });
+
+  it('a required path that the base never had skips the part, with a visible warning and no stamp', () => {
+    const r = makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n' }, baseConfig({ parts }));
+    r.write('src/app.js', 'BAD\n');
+    const json = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    expect(json['decision']).toBeUndefined();
+    const message = String(json['systemMessage']);
+    expect(message).toContain('part "app" was skipped');
+    expect(message).toContain('needed.txt');
+    expect(message).toContain('did NOT run');
+    expect(stopLog(r).at(-1)).toMatchObject({ result: 'pass', skipped: { app: 'requires missing: needed.txt' } });
+    expect(existsSync(join(stateFolder(r), 'stamps.jsonl'))).toBe(false);
+  });
+});
+
+describe('stop-check rounds (finding 008)', () => {
+  const flag = (n: string): string => `node -e "process.exit(require('fs').existsSync('${n}')?1:0)"`;
+  const parts = [
+    { name: 'one', paths: ['**'], checks: [{ name: 'c', run: flag('F1'), timeoutSec: 60 }] },
+    { name: 'two', paths: ['**'], checks: [{ name: 'c', run: flag('F2'), timeoutSec: 60 }] },
+  ];
+
+  it('failures that take turns still hand off at maxRounds, and a handoff starts again at round 1', () => {
+    const r = setup({ parts });
+    const turn = (on: string, off: string): Record<string, unknown> => {
+      rmSync(join(r.dir, off), { force: true });
+      r.write(on, 'x\n');
+      return lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    };
+    expect(String(turn('F1', 'F2')['reason'])).toContain('Round 1 of 3');
+    expect(String(turn('F2', 'F1')['reason'])).toContain('Round 2 of 3');
+    const third = turn('F1', 'F2');
+    expect(third['continue']).toBe(false);
+    expect(String(third['stopReason'])).toContain('still fails after 3 rounds');
+    expect(stopLog(r).map((x) => x['result'])).toEqual(['block', 'block', 'handoff']);
+    expect(String(turn('F2', 'F1')['reason'])).toContain('Round 1 of 3');
+  });
+
+  it('a pass clears the rounds, and old-format keys in state.json are ignored and cleared', () => {
+    const r = setup({ parts });
+    r.write('F1', 'x\n');
+    r.vlite(['stop-check', '--session', 's']);
+    const file = join(stateFolder(r), 'state.json');
+    const state = JSON.parse(readFileSync(file, 'utf8')) as { rounds: Record<string, number> };
+    expect(Object.keys(state.rounds)).toEqual(['s|branch:feature']);
+    state.rounds['s|one/c,two/c'] = 2; // the old key format: one key per set of failing checks
+    writeFileSync(file, JSON.stringify(state));
+    expect(String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['reason'])).toContain('Round 2 of 3');
+    rmSync(join(r.dir, 'F1'));
+    r.write('F3', 'y\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect((JSON.parse(readFileSync(file, 'utf8')) as { rounds: object }).rounds).toEqual({});
   });
 });

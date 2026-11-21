@@ -132,7 +132,7 @@ describe('test-only rerun', () => {
   it('quotes file names and gives paths relative to the check folder', () => {
     const out = join(tempDir('rec-'), 'runs.log').replace(/\\/g, '/');
     const r = makeRepo(
-      { 'rec.mjs': REC, 'pkg/src/app.js': 'v1\n', 'pkg/tests/test one.py': T('a') },
+      { 'rec.mjs': REC, 'pkg/src/app.js': 'v1\n', 'pkg/tests/test_one two.py': T('a') },
       baseConfig({
         tests: { paths: ['pkg/tests/**'], removalsLog: 'TEST-REMOVALS.md' },
         parts: [{ name: 'pkg', paths: ['pkg/**'], cwd: 'pkg', checks: [{ name: 't', run: `node ../rec.mjs ${out} FULL`, runFiles: `node ../rec.mjs ${out} NARROW {files}` }] }],
@@ -140,9 +140,9 @@ describe('test-only rerun', () => {
     );
     r.write('pkg/src/app.js', 'v2\n');
     expect(stop(r).out).toBe('');
-    r.write('pkg/tests/test one.py', T('a', '    assert 2 == 2\n'));
+    r.write('pkg/tests/test_one two.py', T('a', '    assert 2 == 2\n'));
     stop(r);
-    expect(lines(out).at(-1)).toBe('NARROW tests/test one.py');
+    expect(lines(out).at(-1)).toBe('NARROW tests/test_one two.py');
   });
 
   it('fills {name} in runFiles for template parts', () => {
@@ -164,5 +164,73 @@ describe('test-only rerun', () => {
     const cfg = (runFiles: string): string => JSON.stringify({ version: 1, parts: [{ name: 'a', paths: ['src/**'], checks: [{ name: 't', run: 'x', runFiles }] }] });
     expect(() => parseConfig(cfg('pytest tests -q'), 'test')).toThrow(/checks\[0\]\.runFiles must contain \{files\}/);
     expect(parseConfig(cfg('pytest {files} -q'), 'test').parts[0]?.checks[0]?.runFiles).toBe('pytest {files} -q');
+  });
+});
+
+describe('narrow mode only for real test files (finding 002)', () => {
+  const stamps = (r: Repo): Record<string, unknown>[] => {
+    const [name] = readdirSync(r.home);
+    const file = join(r.home, name ?? '', 'stamps.jsonl');
+    return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>) : [];
+  };
+
+  it('a changed helper under tests.paths forces the full check', () => {
+    const s = setup();
+    firstPass(s);
+    s.r.write('tests/helper.js', 'module.exports = 1;\n');
+    expect(stop(s.r).out).toBe('');
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+    expect(stopLog(s.r).at(-1)).not.toHaveProperty('narrow');
+  });
+
+  it('a helper changed together with a test file forces the full check', () => {
+    const s = setup();
+    firstPass(s);
+    s.r.write('tests/test_a.py', T('a', '    assert 2 == 2\n'));
+    s.r.write('tests/conftest.py', 'import pytest\n');
+    stop(s.r);
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+  });
+
+  it('every default test file pattern still runs narrow', () => {
+    for (const file of ['tests/test_x.py', 'tests/x_test.py', 'tests/x.test.ts', 'tests/x.spec.js', 'tests/x_test.go']) {
+      const s = setup();
+      firstPass(s);
+      s.r.write(file, 'x\n');
+      stop(s.r);
+      expect(s.runs(), file).toEqual(['FULL', `NARROW ${file}`]);
+    }
+  });
+
+  it('tests.files in vlite.json replaces the default patterns', () => {
+    const out = join(tempDir('rec-'), 'runs.log').replace(/\\/g, '/');
+    const r = makeRepo(
+      { 'rec.mjs': REC, 'src/app.js': 'v1\n', 'tests/check_a.py': T('a') },
+      baseConfig({
+        tests: { paths: ['tests/**'], files: ['**/check_*.py'], removalsLog: 'TEST-REMOVALS.md' },
+        parts: [{ name: 'app', paths: ['src/**', 'tests/**'], checks: [{ name: 'tests', run: `node rec.mjs ${out} FULL`, runFiles: `node rec.mjs ${out} NARROW {files}`, timeoutSec: 60 }] }],
+      }),
+    );
+    r.write('src/app.js', 'v2\n');
+    stop(r);
+    r.write('tests/check_a.py', T('a', '    assert 2 == 2\n'));
+    stop(r);
+    r.write('tests/test_a.py', T('a'));
+    stop(r);
+    expect(lines(out)).toEqual(['FULL', 'NARROW tests/check_a.py', 'FULL']);
+  });
+
+  it('a bad tests.files is a config error', () => {
+    expect(() => parseConfig(JSON.stringify({ version: 1, tests: { files: 'x' } }), 'x')).toThrow('"tests.files" must be a list of strings');
+    expect(parseConfig(JSON.stringify({ version: 1 }), 'x').tests.files).toContain('**/test_*.py');
+  });
+
+  it('a narrow pass writes a stop-check stamp that says it was narrow; a full pass does not', () => {
+    const s = setup();
+    firstPass(s);
+    expect(stamps(s.r).at(-1)).toMatchObject({ method: 'stop-check', result: 'pass', note: 'stop-check pass' });
+    s.r.write('tests/test_a.py', T('a', '    assert 2 == 2\n'));
+    stop(s.r);
+    expect(stamps(s.r).at(-1)).toMatchObject({ method: 'stop-check', result: 'pass', note: 'stop-check pass (narrow: only changed test files ran)' });
   });
 });

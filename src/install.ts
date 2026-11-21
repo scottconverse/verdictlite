@@ -1,6 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from './config.js';
+import { HOOK_TIMEOUT_SEC } from './connect.js';
 import { gitOut } from './git.js';
 import { UsageError } from './stamp.js';
 
@@ -60,10 +62,28 @@ export function install(root: string, uninstall: boolean): string[] {
   return notes;
 }
 
+/**
+ * A warning when the checks in vlite.json can add up to more than the Stop hook timeout (the app would kill the hook
+ * before it writes a verdict). A template part counts its checks times maxExpandedParts. Null when fine; never throws.
+ */
+export function hookTimeoutWarning(root: string): string | null {
+  try {
+    const loaded = loadConfig(root);
+    if (!loaded) return null;
+    const { parts, maxExpandedParts } = loaded.config;
+    let total = 0;
+    for (const p of parts) total += p.checks.reduce((n, c) => n + c.timeoutSec, 0) * (p.template ? maxExpandedParts : 1);
+    if (total <= HOOK_TIMEOUT_SEC) return null;
+    return `Warning: the check timeouts in vlite.json add up to ${total} s (a template part counts its checks times maxExpandedParts, ${maxExpandedParts}), more than the Stop hook timeout of ${HOOK_TIMEOUT_SEC} s. The app can kill the hook before a verdict is written. Lower the check timeouts, or raise the hook timeout in the app settings.`;
+  } catch {
+    return null; // a config problem must never make install fail
+  }
+}
+
 export function claudeSnippet(): string {
   const snippet = {
     hooks: {
-      Stop: [{ hooks: [{ type: 'command', command: 'vlite stop-check', timeout: 3600 }] }],
+      Stop: [{ hooks: [{ type: 'command', command: 'vlite stop-check', timeout: HOOK_TIMEOUT_SEC }] }],
     },
   };
   return [

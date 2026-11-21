@@ -9,7 +9,11 @@ export interface GitResult {
   err: string;
 }
 
-export function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): GitResult {
+/** A git call that runs longer than this is killed and reported as failed. */
+export const GIT_TIMEOUT_MS = 300_000;
+
+export function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string; timeoutMs?: number } = {}): GitResult {
+  const timeoutMs = opts.timeoutMs ?? GIT_TIMEOUT_MS;
   const r = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',
@@ -17,12 +21,17 @@ export function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv
     input: opts.input ?? '',
     maxBuffer: 512 * 1024 * 1024,
     windowsHide: true,
+    timeout: timeoutMs,
   });
-  if (r.error) throw r.error;
+  if (r.error) {
+    // A timeout is a failed call, never a success. Callers that need git to work throw on ok:false (gitOut).
+    if ((r.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') return { ok: false, out: r.stdout ?? '', err: `git ${args.join(' ')} timed out after ${Math.round(timeoutMs / 1000)} s` };
+    throw r.error;
+  }
   return { ok: r.status === 0, out: r.stdout, err: r.stderr };
 }
 
-export function gitOut(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): string {
+export function gitOut(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string; timeoutMs?: number } = {}): string {
   const r = git(cwd, args, opts);
   if (!r.ok) throw new Error(`git ${args.join(' ')} failed: ${r.err.trim()}`);
   return r.out.trim();
@@ -59,6 +68,12 @@ export function isTree(root: string, id: string): boolean {
 export function showFile(root: string, ref: string, path: string): string | null {
   const r = git(root, ['show', `${ref}:${path}`]);
   return r.ok ? r.out : null;
+}
+
+/** True when path (a file or a folder) exists at ref. */
+export function existsAt(root: string, ref: string, path: string): boolean {
+  const clean = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return git(root, ['cat-file', '-e', `${ref}:${clean}`]).ok;
 }
 
 export function emptyTree(root: string): string {
