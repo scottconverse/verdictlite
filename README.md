@@ -408,8 +408,12 @@ Runs one AI review round on the diff from the merge-base to the working tree.
 - When the command is Claude Code (`claude`), VerdictLite adds
   `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
   tools. If your `review.args` already has `--disallowedTools`, your value is
-  kept. For any other command (such as `codex`), only the prompt says
-  "read-only". VerdictLite cannot block tools there.
+  kept. When the command is Codex (`codex`) and the args have `exec`,
+  VerdictLite adds `--sandbox read-only`. If your `review.args` already sets a
+  sandbox (`--sandbox`, `-s`, `--full-auto` or
+  `--dangerously-bypass-approvals-and-sandbox`), your choice is kept. For any
+  other command, only the prompt says "read-only". VerdictLite cannot block
+  tools there.
 - The reviewer runs with `VLITE_REVIEWER=1`. The stop check does nothing in that session. A review never runs your repo's checks and is never blocked by them.
 - The reviewer must reply in strict JSON findings, each `important`, `nit` or
   `pre-existing`.

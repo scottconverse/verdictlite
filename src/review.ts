@@ -126,18 +126,34 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
 /** Tools the app must not give a Claude Code reviewer. Bash is included, because a shell can write files too. */
 export const CLAUDE_BLOCKED_TOOLS = 'Edit,Write,NotebookEdit,Bash';
 
-/** True when the first word of the command is Claude Code (claude, claude.cmd, claude.exe, with or without a path). */
-export function isClaudeCommand(command: string): boolean {
+/** The program name of the first word of the command: lower case, no path, no .exe/.cmd/.bat/.ps1. Handles quotes. */
+function commandName(command: string): string {
   const first = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command);
   const word = first?.[1] ?? first?.[2] ?? first?.[3] ?? '';
-  return basename(word.replace(/\\/g, '/')).toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, '') === 'claude';
+  return basename(word.replace(/\\/g, '/')).toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, '');
+}
+
+/** True when the first word of the command is Claude Code (claude, claude.cmd, claude.exe, with or without a path). */
+export function isClaudeCommand(command: string): boolean {
+  return commandName(command) === 'claude';
+}
+
+/** True when the first word of the command is Codex (codex, codex.cmd, codex.exe, with or without a path). */
+export function isCodexCommand(command: string): boolean {
+  return commandName(command) === 'codex';
 }
 
 /**
  * The reviewer's arguments. For Claude Code, the app is told to block write tools (--disallowedTools), so read-only does
- * not depend on the prompt. A user who already passes that flag keeps their own value. Other tools get their args unchanged.
+ * not depend on the prompt. For `codex exec`, the app adds `--sandbox read-only`. A user who already passes either choice
+ * keeps their own value. Other tools get their args unchanged.
  */
 export function reviewerArgs(command: string, args: string[]): string[] {
+  if (isCodexCommand(command)) {
+    if (!args.includes('exec')) return args;
+    if (args.some((a) => /^(--sandbox(=|$)|-s$|--full-auto$|--dangerously-bypass-approvals-and-sandbox$)/.test(a))) return args;
+    return [...args, '--sandbox', 'read-only'];
+  }
   if (!isClaudeCommand(command)) return args;
   if (args.some((a) => /^--(disallowedTools|disallowed-tools)(=|$)/.test(a))) return args;
   return [...args, '--disallowedTools', CLAUDE_BLOCKED_TOOLS];

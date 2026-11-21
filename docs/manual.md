@@ -625,8 +625,12 @@ What it does:
    When the command is Claude Code (`claude`), VerdictLite adds
    `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
    tools. If your `review.args` already has `--disallowedTools`, your value is
-   kept. For any other command, only the prompt says "read-only". VerdictLite
-   cannot block tools there.
+   kept. When the command is Codex (`codex`) and the args have `exec`,
+   VerdictLite adds `--sandbox read-only`. If your `review.args` already sets a
+   sandbox (`--sandbox`, `-s`, `--full-auto` or
+   `--dangerously-bypass-approvals-and-sandbox`), your choice is kept. For any
+   other command, only the prompt says "read-only". VerdictLite cannot block
+   tools there.
 5. Expects strict JSON back: a list of findings, each with a severity, file,
    line, rule, problem and evidence.
 

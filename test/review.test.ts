@@ -171,7 +171,22 @@ describe('review prompt and Claude Code limits (finding 006)', () => {
     expect(CLAUDE_BLOCKED_TOOLS.split(',')).toEqual(expect.arrayContaining(['Edit', 'Write', 'NotebookEdit', 'Bash']));
     expect(reviewerArgs('claude', ['-p', '--disallowedTools', 'Edit'])).toEqual(['-p', '--disallowedTools', 'Edit']);
     expect(reviewerArgs('claude', ['-p', '--disallowed-tools=Edit'])).toEqual(['-p', '--disallowed-tools=Edit']);
-    expect(reviewerArgs('codex', ['exec'])).toEqual(['exec']);
+    expect(reviewerArgs('node', ['exec'])).toEqual(['exec']);
+  });
+
+  it('adds a read-only sandbox for codex exec, and keeps a sandbox choice the user made', () => {
+    const ro = ['exec', '--sandbox', 'read-only'];
+    for (const c of ['codex', 'codex.cmd', '"C:\\Users\\a b\\codex.exe"', '/usr/local/bin/codex', "'C:/x/Codex.CMD'"]) expect(reviewerArgs(c, ['exec']), c).toEqual(ro);
+    expect(reviewerArgs('codex', ['exec', '-'])).toEqual(['exec', '-', '--sandbox', 'read-only']);
+    expect(reviewerArgs('codex', ['-m', 'x', 'exec'])).toEqual(['-m', 'x', 'exec', '--sandbox', 'read-only']);
+    for (const a of [['--sandbox', 'workspace-write'], ['--sandbox=danger-full-access'], ['-s', 'workspace-write'], ['--full-auto'], ['--dangerously-bypass-approvals-and-sandbox']]) {
+      expect(reviewerArgs('codex', ['exec', ...a]), a.join(' ')).toEqual(['exec', ...a]);
+    }
+    expect(reviewerArgs('codex', ['login'])).toEqual(['login']);
+    expect(reviewerArgs('codex', [])).toEqual([]);
+    expect(reviewerArgs('codexx', ['exec'])).toEqual(['exec']);
+    expect(reviewerArgs('claudex', ['exec'])).toEqual(['exec']);
+    expect(reviewerArgs('claude', ['exec'])).toEqual(['exec', '--disallowedTools', CLAUDE_BLOCKED_TOOLS]);
   });
 
   it('passes the flag to a real claude command line, and not to another tool', () => {
