@@ -251,7 +251,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
     <div class="caps">
       <div class="cap">
         <h3>Stop check</h3>
-        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch. If only test files changed since the part last passed, a check with <code>runFiles</code> runs just those test files.</p>
+        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch. If only real test files changed since the part last passed, a check with <code>runFiles</code> runs just those test files. A helper or fixture forces the full check. A check that times out is no result: it is a warning, not a failure and not a pass.</p>
       </div>
       <div class="cap">
         <h3>Three-round hand-off</h3>
