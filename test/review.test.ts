@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tempDir } from './root.js';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_BLOCKED_TOOLS, isClaudeCommand, parseReply, reviewerArgs } from '../src/review.js';
+import { CLAUDE_BLOCKED_TOOLS, CODEX_READONLY_ARGS, isClaudeCommand, parseReply, reviewerArgs } from '../src/review.js';
 import { baseConfig, makeRepo, type Repo } from './helpers.js';
 
 /** Fake reviewer: saves the prompt it got, then prints the reply file. */
@@ -174,11 +174,17 @@ describe('review prompt and Claude Code limits (finding 006)', () => {
     expect(reviewerArgs('node', ['exec'])).toEqual(['exec']);
   });
 
+  it('turns off every Codex tool that can write', () => {
+    for (const t of ['shell_tool', 'unified_exec', 'code_mode_host', 'multi_agent', 'apps', 'plugins']) expect(CODEX_READONLY_ARGS).toContain(t);
+    expect(CODEX_READONLY_ARGS).toContain('mcp_servers={}');
+    expect(CODEX_READONLY_ARGS).toContain('include_apply_patch_tool=false');
+  });
+
   it('adds a read-only sandbox for codex exec, and keeps a sandbox choice the user made', () => {
-    const ro = ['exec', '--sandbox', 'read-only'];
+    const ro = ['exec', ...CODEX_READONLY_ARGS];
     for (const c of ['codex', 'codex.cmd', '"C:\\Users\\a b\\codex.exe"', '/usr/local/bin/codex', "'C:/x/Codex.CMD'"]) expect(reviewerArgs(c, ['exec']), c).toEqual(ro);
-    expect(reviewerArgs('codex', ['exec', '-'])).toEqual(['exec', '-', '--sandbox', 'read-only']);
-    expect(reviewerArgs('codex', ['-m', 'x', 'exec'])).toEqual(['-m', 'x', 'exec', '--sandbox', 'read-only']);
+    expect(reviewerArgs('codex', ['exec', '-'])).toEqual(['exec', '-', ...CODEX_READONLY_ARGS]);
+    expect(reviewerArgs('codex', ['-m', 'x', 'exec'])).toEqual(['-m', 'x', 'exec', ...CODEX_READONLY_ARGS]);
     for (const a of [['--sandbox', 'workspace-write'], ['--sandbox=danger-full-access'], ['-s', 'workspace-write'], ['--full-auto'], ['--dangerously-bypass-approvals-and-sandbox']]) {
       expect(reviewerArgs('codex', ['exec', ...a]), a.join(' ')).toEqual(['exec', ...a]);
     }

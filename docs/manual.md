@@ -626,7 +626,8 @@ What it does:
    `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
    tools. If your `review.args` already has `--disallowedTools`, your value is
    kept. When the command is Codex (`codex`) and the args have `exec`,
-   VerdictLite adds `--sandbox read-only`. If your `review.args` already sets a
+   VerdictLite adds `--sandbox read-only` and turns off the Codex tools that can
+  write (shell, sub-agents, apps, plugins, MCP and apply_patch). If your `review.args` already sets a
    sandbox (`--sandbox`, `-s`, `--full-auto` or
    `--dangerously-bypass-approvals-and-sandbox`), your choice is kept. For any
    other command, only the prompt says "read-only". VerdictLite cannot block

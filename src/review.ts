@@ -126,6 +126,22 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
 /** Tools the app must not give a Claude Code reviewer. Bash is included, because a shell can write files too. */
 export const CLAUDE_BLOCKED_TOOLS = 'Edit,Write,NotebookEdit,Bash';
 
+/**
+ * Added to  for a reviewer. The sandbox alone is not enough: on Windows, a real test wrote a file under
+ * --sandbox read-only. So the tools that can write (shell, code host, sub-agents, apps, plugins, MCP, apply_patch) are off too.
+ */
+export const CODEX_READONLY_ARGS = [
+  '--sandbox', 'read-only',
+  '--disable', 'shell_tool',
+  '--disable', 'unified_exec',
+  '--disable', 'code_mode_host',
+  '--disable', 'multi_agent',
+  '--disable', 'apps',
+  '--disable', 'plugins',
+  '-c', 'mcp_servers={}',
+  '-c', 'include_apply_patch_tool=false',
+];
+
 /** The program name of the first word of the command: lower case, no path, no .exe/.cmd/.bat/.ps1. Handles quotes. */
 function commandName(command: string): string {
   const first = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command);
@@ -145,14 +161,14 @@ export function isCodexCommand(command: string): boolean {
 
 /**
  * The reviewer's arguments. For Claude Code, the app is told to block write tools (--disallowedTools), so read-only does
- * not depend on the prompt. For `codex exec`, the app adds `--sandbox read-only`. A user who already passes either choice
+ * not depend on the prompt. For `codex exec`, the app adds CODEX_READONLY_ARGS. A user who already passes either choice
  * keeps their own value. Other tools get their args unchanged.
  */
 export function reviewerArgs(command: string, args: string[]): string[] {
   if (isCodexCommand(command)) {
     if (!args.includes('exec')) return args;
     if (args.some((a) => /^(--sandbox(=|$)|-s$|--full-auto$|--dangerously-bypass-approvals-and-sandbox$)/.test(a))) return args;
-    return [...args, '--sandbox', 'read-only'];
+    return [...args, ...CODEX_READONLY_ARGS];
   }
   if (!isClaudeCommand(command)) return args;
   if (args.some((a) => /^--(disallowedTools|disallowed-tools)(=|$)/.test(a))) return args;
