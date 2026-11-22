@@ -694,7 +694,8 @@ It looks at **added and removed lines** in changed test files. It fails on:
 - **Added skip markers:** `@pytest.mark.skip`, `pytest.skip(`, `@unittest.skip`,
   `xfail`, `.skip(`, `it.skip`, `test.skip`, `describe.skip`, `xit(`,
   `xdescribe(`, `xtest(`, `test.fixme`, `it.only`, `test.only`,
-  `describe.only`, `fit(`, `fdescribe(`, `pytest.importorskip(`.
+  `describe.only`, `fit(`, `fdescribe(`, `pytest.importorskip(`,
+  `.skipTest(`, `.skipIf(`, `@unittest.expectedFailure`, `.fixme(`.
   A platform guard is not a skip. This is a conditional skip whose only condition
   is the operating system, for example
   `@pytest.mark.skipif(os.name != "nt", reason="...")`,
