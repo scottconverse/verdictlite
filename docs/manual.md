@@ -820,7 +820,7 @@ repo share it.
 |---|---|
 | `state.json` | The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
 | `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
-| `stop.jsonl` | One line per repo checked. A global stop can write several. A stop that repeats a saved result writes none. |
+| `stop.jsonl` | One line per repo checked: pass, block, handoff, no-result, missing-config or error. A global stop can write several. A stop that repeats a saved result writes none. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
 | `handoffs/` | The saved output of each failing stop-check round: the last 2,000 lines for each failing check, plus up to 200 changed file names. |
