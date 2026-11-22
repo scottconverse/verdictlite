@@ -2,9 +2,9 @@
 
 **Make the coding agent run the checks before it stops.**
 
-VerdictLite is a small command-line tool for git repos. When a Claude Code
-agent tries to stop, it runs your checks. It flags tests that were skipped or
-deleted. At commit time it writes down how the change was verified.
+VerdictLite is a small command-line tool for git repos. When a Claude Code or
+a Codex agent tries to stop, it runs your checks. It flags tests that were
+skipped or deleted. At commit time it writes down how the change was verified.
 
 - Website: <https://scottconverse.github.io/verdictlite/>
 - User manual: [docs/manual.md](docs/manual.md) (also on the
@@ -19,7 +19,7 @@ endorsed by Anthropic.
 - [What it is and why](#what-it-is-and-why)
 - [Install](#install)
 - [Set up a repo, step by step](#set-up-a-repo-step-by-step)
-- [The five commands](#the-five-commands)
+- [The commands](#the-commands)
 - [Require VerdictLite in a GitHub org](#require-verdictlite-in-a-github-org)
 - [Config reference: `vlite.json`](#config-reference-vlitejson)
 - [Where state lives](#where-state-lives)
@@ -39,16 +39,17 @@ VerdictLite puts a simple check at each of those points:
 
 | What goes wrong | What VerdictLite does |
 |---|---|
-| The agent stops without running the checks. | A Claude Code Stop hook (`vlite stop-check`) runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error. |
+| The agent stops without running the checks. | A Stop hook in Claude Code or Codex (`vlite stop-check`) runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error. |
 | A failing test gets skipped, slowed, retried or deleted. | A built-in test-tamper check looks at changed lines in test files. It flags added skips, fixed sleeps, retries and removed tests. |
-| The agent tries the same broken fix forever. | Failed rounds are counted for each session and branch. After three, the session ends and a person is asked to look. |
+| The agent tries the same broken fix forever. | Failed rounds are counted for each session and branch. After three, VerdictLite stops blocking, prints `continue: false` and hands off to a person. Claude Code stops the agent; Codex marks the hook run as stopped. |
 | A commit gives no sign of how it was checked. | Git hooks add a `Verified-By:` line to every commit message when the gate is on (`observe` or `enforce`). |
 | A change loosens the rules that judge it. | The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo. The commands the config runs (package.json scripts, pyproject, ruff, mypy, eslint configs) come from the working tree. |
 
 Two parts, two scopes:
 
-- **The stop check** is a [Claude Code Stop hook](https://code.claude.com/docs/en/hooks).
-  It needs Claude Code. The test-tamper check runs inside it.
+- **The stop check** is a Stop hook. It runs in Claude Code and in Codex. It
+  uses the [Claude Code Stop hook format](https://code.claude.com/docs/en/hooks).
+  The test-tamper check runs inside it.
 - **The commit gate** is plain git hooks. It works with any agent and with
   people.
 
@@ -104,6 +105,9 @@ The installer needs no admin rights. It does these things:
    `connect-off.json` marker there. In those cases the installer keeps your
    current connect state, does not run `vlite connect`, and prints one line that
    says why. Use `-NoConnect` to never connect, or `-Connect` to connect anyway.
+   The installer also takes `-Version X.Y.Z` (install a set release),
+   `-InstallDir PATH` (the program folder), `-NoPath` (leave your user PATH
+   alone) and `-PlanOnly` (print the steps and change nothing).
 
 Open a new terminal after it finishes. If it connected the apps, restart the
 Claude and Codex apps. Codex runs a new hook only after you approve it. In
@@ -123,14 +127,18 @@ If VerdictLite's own hook entry has an old path or timeout (for example after
 you moved the install folder), `vlite connect` updates it, makes a backup and
 says so. A hook command that is not VerdictLite's own is never changed.
 
-**Codex limit:** VerdictLite checks only the repo that the Codex session opened
-in. It cannot read the Codex log to find other repos that the session changed.
+**Codex limit:** In Codex, VerdictLite checks the repo the session opened in, plus
+any repo that blocked on that session's last stop. It cannot use the Codex log to
+find other repos the session changed. If the opened repo has `vlite stop-check` in
+`.claude/settings.json`, VerdictLite treats that repo as already covered, so a
+Codex session there does not check it.
 
 **To update:** run the installer again. It replaces the files in the same
 folder, so the paths in your git hooks stay valid.
 
-**To uninstall:** in each guarded repo, run `vlite install --uninstall` to
-remove its hooks. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
+**To uninstall:** run `vlite connect --uninstall` to remove the user-level Claude
+Code and Codex hooks. Then, in each guarded repo, run `vlite install --uninstall`
+to remove its hooks. Remove the `vlite stop-check` entry from each guarded repo's `.claude/settings.json` or `.claude/settings.local.json`, if you added one. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
 remove `%LOCALAPPDATA%\VerdictLite\bin` from your user PATH (Windows Settings,
 search for "environment variables", then "Edit environment variables for your
 account").
@@ -232,6 +240,10 @@ warning when the check timeouts in `vlite.json` add up to more than 3600 s. A
 template part counts its checks times `maxExpandedParts`. If the app kills the
 hook, no verdict is written.
 
+**Codex users:** run `vlite connect --codex`. It writes
+`$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`). Then approve the hook
+in Codex.
+
 A project hook loads only when a Claude Code session starts inside the repo.
 If your sessions or agent workers start in another folder and edit the repo
 from there, also add the hook to your user settings (`~/.claude/settings.json`)
@@ -243,12 +255,17 @@ with `--global`:
 
 `--global` checks every repo with a `vlite.json` that the session edited with
 its edit tools (Edit, Write, MultiEdit, NotebookEdit) since your last prompt.
-It also checks the session folder's repo, unless that repo has its own project
-hook. VerdictLite finds a project hook only in `.claude/settings.json`, so a
+It also checks every repo that blocked on this session's last stop, and the
+session folder's repo unless that repo has its own project hook. VerdictLite
+finds a project hook only in `.claude/settings.json`, so a
 hook kept only in `.claude/settings.local.json` is not seen, and that repo is
 checked twice under `--global`. In folders and repos without a `vlite.json` it
-does nothing. Limit: a file changed only by a shell command is not seen, unless
-the session started in that repo.
+does nothing, except the required-org check described below. Limit: a file
+changed only by a shell command is not seen, unless the session started in that
+repo. In Codex, VerdictLite checks the repo the session opened in, plus any repo
+that blocked on its last stop. It cannot use the Codex log to find other repos.
+A repo with `vlite stop-check` in `.claude/settings.json` counts as covered and
+is not checked.
 
 **6. Add a verify skill** (recommended). A
 [Claude Code skill](https://code.claude.com/docs/en/skills) at
@@ -264,7 +281,7 @@ Add `.verify/` to `.gitignore` so evidence files do not change the tree. The
 [manual](docs/manual.md#step-6-add-a-verify-skill-recommended) has a full
 example skill.
 
-## The five commands
+## The commands
 
 Commands that work on a repo take `--repo DIR`. The default is the current
 folder.
@@ -282,9 +299,9 @@ vlite install --uninstall   # remove the hooks and restore old ones
 
 ### `vlite stop-check [--session ID] [--global]`
 
-The Claude Code Stop hook. It runs when the agent tries to stop. With
-`--global` (for the user-level hook) it does the steps below for each repo the
-session edited this turn. It sends one combined message.
+The Stop hook for Claude Code and Codex. It runs when the agent tries to stop.
+With `--global` (for the user-level hook) it does the steps below for each repo
+the session edited this turn. It sends one combined message.
 
 1. It works out the tree id (git's hash of the whole set of files) of the
    working tree. If this tree already passed on this branch, it lets the agent
@@ -305,10 +322,12 @@ session edited this turn. It sends one combined message.
 6. All pass: it records the pass. Something fails: it blocks the stop and tells
    the agent the command, the exit code and the last 60 lines of output.
 7. Rounds are counted for each session and branch, not for each set of failing
-   checks. On round `maxRounds` (3 by default) it ends the session and asks for
-   a person. Failures that take turns count together. After a hand-off, or a
-   pass, the count starts again. Each failing round writes a hand-off file with
-   up to 2,000 lines.
+   checks. On round `maxRounds` (3 by default) it stops blocking, prints
+   `continue: false` and hands off to a person. Claude Code stops the agent;
+   Codex marks the hook run as stopped. Failures that take turns count together. After a hand-off, or a
+   pass, the count starts again. Each failing round writes a hand-off file: the
+   last 2,000 lines of output for each failing check, plus up to 200 changed
+   file names.
 
 **A check that times out is no result.** It is not a failure. It does not count
 a round, does not block, and never hands off. The part is not marked as passed.
@@ -331,24 +350,27 @@ fails, VerdictLite reads the failed tests from its output (pytest `FAILED` and
 then gives the agent one command that runs only those tests. At the next stop,
 that check runs only the saved tests. If they pass, the agent sees a warning:
 the full check did not run, so it is not proof, and no stamp is written. CI or
-`vlite stamp verify` gives the full proof. The next stop on a changed tree runs
-the check in full again. If the output has no failed test names, or a test file
-is gone, the check runs in full. A command with `-x` stops at the first
+`vlite stamp verify` gives the full proof. The saved ids are cleared, so the
+next stop on a changed tree starts the check again: in full, or in narrow mode if only test files
+changed since the part last passed. If the output has no failed test names, or a
+test file is gone, the saved ids are dropped and the check then runs narrow or
+full as usual. A command with `-x` stops at the first
 failure, so it records one test at a time.
 
 If VerdictLite itself breaks, it logs the error and lets the agent stop. A
 failing check always blocks.
 
 ```sh
-vlite stop-check --session my-test   # run it by hand, without Claude Code
+vlite stop-check --session my-test   # run it by hand, without an agent app
 ```
 
 A stop-check pass lets the agent stop. When at least one check ran in full (no
-part was skipped and it was not a narrow run), it also writes a `stop-check` stamp for that exact tree, so a commit
-of the same files shows `Verified-By: stop-check`. A pass where no check ran
-(docs only, or files no part covers) writes no stamp.
+part was skipped, the run was not narrow, and no check passed only on the tests
+that failed last time), it also writes a `stop-check` stamp for that exact
+tree, so a commit of the same files shows `Verified-By: stop-check`. A pass
+where no check ran (docs only, or files no part covers) writes no stamp.
 
-If VerdictLite itself fails (a broken or mistyped `vlite.json`, a locked file), it still lets the agent stop, but it now says so: the hook prints a `systemMessage` that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in `vlite.json` are an error, so a typo such as `"part"` is caught.
+If VerdictLite itself fails (a broken or mistyped `vlite.json`, a locked file), it still lets the agent stop, but it now says so: the hook prints a `systemMessage` that the app (Claude Code or Codex) shows to the person, and the text is added to any block or handoff. Unknown top-level keys in `vlite.json` are an error, so a typo such as `"part"` is caught.
 
 ### `vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]`
 
@@ -425,7 +447,7 @@ Overrides (Verify-Skip): 1
 Runs one AI review round on the diff from the merge-base to the working tree.
 
 - The rules come from `REVIEW.md` on the base branch.
-- The diff is cut at 200 KB, and the prompt says so.
+- The diff is cut at about 200 KB, and the prompt says so.
 - Earlier rounds on this branch go into the prompt.
 - The prompt goes on stdin to `review.command` with `review.args`. The default
   is `claude -p`. The env var `VLITE_REVIEW_CMD` replaces the command.
@@ -450,7 +472,7 @@ If you set a sandbox, your choice is kept and the tool lockout is added anyway. 
 | Result | Exit code | Stamp |
 |---|---|---|
 | No `important` findings | 0 | A `code-review` pass stamp |
-| No `important` findings, but the diff was cut at 200 KB or `REVIEW.md` was missing on the base branch | 2 | None |
+| No `important` findings, but the diff was cut at about 200 KB or `REVIEW.md` was missing on the base branch | 2 | None |
 | One or more `important` findings | 2 | None |
 | Reviewer failed, timed out or replied badly | 1 | None. The raw reply is saved. |
 
@@ -511,7 +533,10 @@ Limits:
 - This runs only on PCs where VerdictLite is installed and connected.
 - A repo with no `origin` remote, or an `origin` on another host, is not
   checked.
-- Codex checks only the folder the session opened in.
+- In Codex, VerdictLite checks the repo the session opened in, plus any repo that
+  blocked on its last stop. It cannot use the Codex log to find other repos. A
+  repo with `vlite stop-check` in `.claude/settings.json` counts as covered and
+  is not checked.
 
 ## Config reference: `vlite.json`
 
@@ -576,9 +601,10 @@ only the tests of the module that changed:
 - A change to `civiccast/egress/net.py` runs `pytest tests/egress`. Messages
   call the part `backend:egress`. A change in two modules runs both.
 - `{name}` is filled in the part's `name`, `paths`, `requires` and `cwd`, and
-  in each check's `run` and `cwd`. It must be a whole folder name. Every path
-  and the `name` of a template part need it. Any other `{...}` in `paths` is an
-  error.
+  in each check's `run`, `runFiles` and `cwd`. It must be a whole folder name.
+  Every path and the `name` of a template part need it. Any other placeholder
+  without a comma, such as `{module}`, in `paths` is an error; a `{a,b}`
+  alternation is allowed.
 - A module with no `tests/<module>` folder is skipped. `requires` does this,
   `stop.jsonl` says `"requires missing: tests/foo"`, and a warning line is shown.
 - **Safe names only.** The folder name goes into a shell command. It is used
@@ -603,10 +629,10 @@ worktrees of one repo share the folder.
 |---|---|
 | `state.json` | Last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
 | `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
-| `stop.jsonl` | One line per stop check. |
+| `stop.jsonl` | One line per repo checked. A global stop can write several. A stop that repeats a saved result writes none. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
-| `handoffs/` | Full output of each failing stop-check round. |
+| `handoffs/` | The saved output of each failing stop-check round: the last 2,000 lines for each failing check, plus up to 200 changed file names. |
 | `reviews/<branch>/<n>.json` | Each review round. |
 
 Delete the folder to reset VerdictLite for a repo.
@@ -618,8 +644,13 @@ Delete the folder to reset VerdictLite for a repo.
 - **A stamp shows that a step ran. It is a speed bump, not proof.** Anyone can
   write a stamp by hand, and `git commit --no-verify` skips git hooks.
   VerdictLite makes these choices visible. It does not make them impossible.
-- **The stop check needs Claude Code.** Other agents get the commit gate only.
-  The tamper check runs inside the stop check.
+- **The stop check needs Claude Code or Codex.** It runs as a Stop hook in
+  either app. Other agents do not get the Stop hook automatically; they get the
+  commit gate, and `vlite stamp` / `vlite review` are CLI commands any agent can
+  run. The tamper check runs inside the stop check. In Codex, VerdictLite checks
+  the repo the session opened in, plus any repo that blocked on its last stop.
+  It cannot use the Codex log to find other repos. A repo with `vlite stop-check`
+  in `.claude/settings.json` counts as covered and is not checked.
 - **The tamper check is simple.** It uses regular expressions. It can miss
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.
@@ -629,9 +660,10 @@ Delete the folder to reset VerdictLite for a repo.
   the `claude` CLI). The other commands run only on your machine.
 - **Speed.** Each stop check hashes the whole working tree and runs about 15
   git commands. This adds a short wait before any check runs. The time is not measured yet.
-- **Hook format.** The stop check depends on Claude Code's Stop hook output
-  format (`decision`/`reason`, `continue`/`stopReason`). If that changes,
-  VerdictLite must change too.
+- **Hook format.** The stop check depends on the Stop hook output format that
+  Claude Code and Codex share (`decision`/`reason`, `continue`/`stopReason`). In
+  Codex, `decision: block` continues the turn with the reason as the next prompt.
+  If that format changes, VerdictLite must change too.
 - **Hook managers.** 0.1.15 has not been tested with specific git hook managers.
 
 ## Status

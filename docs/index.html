@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VerdictLite: make the coding agent run the checks</title>
-  <meta name="description" content="VerdictLite (vlite) is a small CLI for git repos. It runs your checks when a Claude Code agent tries to stop, flags skipped or deleted tests, and records how each commit was verified. Version 0.1.15, Apache-2.0.">
+  <meta name="description" content="VerdictLite (vlite) is a small CLI for git repos. It runs your checks when a Claude Code or Codex agent tries to stop, flags skipped or deleted tests, and records how each commit was verified. Version 0.1.15, Apache-2.0.">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
@@ -48,7 +48,7 @@
     <div>
       <p class="eyebrow">v0.1.15 &middot; early release &middot; Apache-2.0</p>
       <h1 id="hero-title">Make the coding agent run the checks before it stops.</h1>
-      <p class="lede">VerdictLite is a small command-line tool for git repos. When a Claude Code agent tries to stop, it runs your checks. It flags tests that were skipped or deleted. At commit time it writes down how the change was verified.</p>
+      <p class="lede">VerdictLite is a small command-line tool for git repos. When a Claude Code or Codex agent tries to stop, it runs your checks. It flags tests that were skipped or deleted. At commit time it writes down how the change was verified.</p>
       <div class="actions">
         <a class="btn btn-primary" href="#install">Install</a>
         <a class="btn btn-secondary" href="manual.html">Read the manual</a>
@@ -57,7 +57,7 @@
       <p class="hero-meta">Early stage: built on 2026-11-21 and being set up on its first real repo now. Not on npm. Not made by or affiliated with Anthropic.</p>
     </div>
     <figure class="term" aria-labelledby="hero-term-cap">
-      <div class="term-bar"><span>Claude Code Stop hook</span><span class="label">vlite stop-check</span></div>
+      <div class="term-bar"><span>Stop hook (Claude Code, Codex)</span><span class="label">vlite stop-check</span></div>
       <pre tabindex="0"><span class="err">VerdictLite: checks failed on this change (repo .../shop).</span>
 
 [app/tests] failed
@@ -102,7 +102,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
     <div class="ledger">
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>The agent stops without running the checks.</h3>
-        <p><span class="k">What VerdictLite does</span>A Claude Code <a href="https://code.claude.com/docs/en/hooks">Stop hook</a> runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error.</p>
+        <p><span class="k">What VerdictLite does</span>A <a href="https://code.claude.com/docs/en/hooks">Stop hook</a> in Claude Code or Codex runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error.</p>
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>A failing test gets skipped, slowed, retried or deleted.</h3>
@@ -110,7 +110,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>The agent tries the same broken fix forever.</h3>
-        <p><span class="k">What VerdictLite does</span>Rounds are counted. After three failed rounds the session ends and a person is asked to look, with a hand-off file of the full output.</p>
+        <p><span class="k">What VerdictLite does</span>Rounds are counted. After three failed rounds VerdictLite hands off to a person, with a saved file of the last output of each failing check. Claude Code stops the agent; Codex marks the hook run as stopped.</p>
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>A commit gives no sign of how it was checked.</h3>
@@ -129,7 +129,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
     <div class="section-head">
       <p class="eyebrow">How it works</p>
       <h2 id="how-title">Two gates: one when the agent stops, one when it commits.</h2>
-      <p>The stop gate needs Claude Code. The commit gate is plain git hooks, so it works with any agent and with people.</p>
+      <p>The stop gate needs Claude Code or Codex. The commit gate is plain git hooks, so it works with any agent and with people.</p>
     </div>
     <figure class="diagram">
       <svg class="wide" viewBox="0 0 972 380" role="img" aria-labelledby="dgw-t dgw-d">
@@ -138,7 +138,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
         <defs>
           <marker id="ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-arrow" d="M0 0L10 5L0 10z"/></marker>
         </defs>
-        <text class="dg-h" x="20" y="18">STOP GATE (CLAUDE CODE)</text>
+        <text class="dg-h" x="20" y="18">STOP GATE (CLAUDE CODE, CODEX)</text>
         <text class="dg-h" x="750" y="18">COMMIT GATE (GIT HOOKS)</text>
 
         <rect class="dg-box" x="20" y="95" width="160" height="70" rx="8"/>
@@ -236,7 +236,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
         <path class="dg-read" d="M380 640H392V130H344" marker-end="url(#ahn)"/>
         <path class="dg-read" d="M392 434H344" marker-end="url(#ahn)"/>
       </svg>
-      <figcaption>A stop-check pass lets the agent stop. When its checks ran, it also writes a <code>stop-check</code> stamp. Other stamps come from <code>vlite stamp verify</code> (usually run by a verify skill) or from a clean <code>vlite review</code>. A stamp shows that a step ran on that exact set of files. It is a speed bump, not proof.</figcaption>
+      <figcaption>A stop-check pass lets the agent stop. When at least one check ran in full, it also writes a <code>stop-check</code> stamp. Other stamps come from <code>vlite stamp verify</code> (usually run by a verify skill) or from a clean <code>vlite review</code>. A stamp shows that a step ran on that exact set of files. It is a speed bump, not proof.</figcaption>
     </figure>
   </div>
 </section>
@@ -245,16 +245,16 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">What it does</p>
-      <h2 id="caps-title">Five commands. One config file.</h2>
+      <h2 id="caps-title">The commands. One config file.</h2>
     </div>
     <div class="caps">
       <div class="cap">
         <h3>Stop check</h3>
-        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. The same tree is never checked twice on one branch. If only real test files changed since the part last passed, a check with <code>runFiles</code> runs just those test files. A helper or fixture forces the full check. A check that times out is no result: it is a warning, not a failure and not a pass.</p>
+        <p><code>vlite stop-check</code> runs the checks for each part of the repo that changed. A docs-only change passes at once. A tree that already passed is not checked again on that branch. If only real test files changed since the part last passed, a check with <code>runFiles</code> runs just those test files. A helper or fixture forces the full check. A check that times out is no result: it is a warning, not a failure and not a pass.</p>
       </div>
       <div class="cap">
         <h3>Three-round hand-off</h3>
-        <p>Failed stops are counted per session and branch. Rounds 1 and 2 block. Round 3 ends the session and points a person to a file with up to 2,000 lines of output.</p>
+        <p>Failed stops are counted per session and branch. Rounds 1 and 2 block. Round 3 hands off to a person. Claude Code stops the agent; Codex marks the hook run as stopped. The hand-off file holds the last 2,000 lines of each failing check.</p>
       </div>
       <div class="cap">
         <h3>Required orgs</h3>
@@ -304,10 +304,10 @@ tests/price.test.js:7 (old line) [removed-test] test('rounds to cents', () =&gt;
       </figure>
       <figure>
         <div class="term">
-          <div class="term-bar"><span>Round 3: the session ends</span></div>
+          <div class="term-bar"><span>Round 3: hand-off to a person</span></div>
           <pre tabindex="0" class="wrap-lines"><span class="err">VerdictLite: app/tests still fails after 3 rounds. A person must look.</span> Last failure: exit code 1. Handoff: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-47-492Z-round3.txt</pre>
         </div>
-        <figcaption class="term-caption">Claude Code gets <code>{"continue": false}</code> and stops the agent. You read the hand-off file and decide what to do.</figcaption>
+        <figcaption class="term-caption">The hook prints <code>{"continue": false}</code>. Claude Code stops the agent; Codex marks the hook run as stopped. You read the hand-off file and decide what to do.</figcaption>
       </figure>
       <figure>
         <div class="term">
@@ -336,7 +336,7 @@ Author: Demo &lt;demo@example.com&gt;
 
     <span class="ok">Verified-By: stop-check</span></pre>
         </div>
-        <figcaption class="term-caption">A passing Stop hook on the same files counts as proof. It counts only when a check really ran.</figcaption>
+        <figcaption class="term-caption">A passing Stop hook on the same files counts as proof. It counts only when a check ran in full.</figcaption>
       </figure>
       <figure class="span-2">
         <div class="term">
@@ -396,14 +396,14 @@ A stamp only counts for the exact staged tree. Stage everything first (git add -
     <div class="section-head">
       <p class="eyebrow">Quick start</p>
       <h2 id="install-title">Install in one click, then set up one repo.</h2>
-      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js LTS with winget if Node 20 or newer is missing, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. The installer also connects VerdictLite to the Claude Code and Codex desktop apps. To update, run it again. To uninstall, run <code>vlite install --uninstall</code> in each guarded repo, then delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
+      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js LTS with winget if Node 20 or newer is missing, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. On a first install, the installer also connects VerdictLite to the Claude Code and Codex apps; use <code>-Connect</code> to connect on an update. To update, run it again. To uninstall, run <code>vlite connect --uninstall</code>, then <code>vlite install --uninstall</code> in each guarded repo, then remove the <code>vlite stop-check</code> entry from each guarded repo's <code>.claude/settings.json</code> or <code>.claude/settings.local.json</code>, if you added one, then delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
     </div>
     <ol class="steps">
       <li>
         <div>
           <h3>Install the tool</h3>
 <pre class="code" tabindex="0"><code><span class="p">PS&gt; </span>irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex</code></pre>
-          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks only the repo that the Codex session opened in. It cannot read the Codex log to find other repos that the session changed.</p>
+          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks the repo the Codex session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</p>
           <p>Open a new terminal and run <code>vlite --help</code> to check.</p>
           <p><strong>From source (any OS).</strong> Keep the clone outside the repos it checks.</p>
 <pre class="code" tabindex="0"><code>git clone https://github.com/scottconverse/verdictlite.git
@@ -450,21 +450,22 @@ npm link</code></pre>
     ]
   }
 }</code></pre>
-          <p>The timeout is in seconds. Make it longer than all your checks put together. Then add a verify skill so the agent stamps its work. The <a href="manual.html#3-set-up-a-repo">manual</a> has a full example.</p>
+          <p>The timeout is in seconds. Make it longer than all your checks put together. Codex users: run <code>vlite connect --codex</code>, which writes <code>$CODEX_HOME/hooks.json</code>, and then approve the hook in Codex. Then add a verify skill so the agent stamps its work. The <a href="manual.html#3-set-up-a-repo">manual</a> has a full example.</p>
         </div>
       </li>
     </ol>
 
-    <h3 style="margin-top:var(--space-7)">The five commands</h3>
+    <h3 style="margin-top:var(--space-7)">Main commands</h3>
     <table class="cmds">
       <tbody>
         <tr><th scope="row"><code>vlite install</code></th><td>Adds or removes (<code>--uninstall</code>) the git hooks. <code>--claude</code> prints the Stop hook settings.</td></tr>
-        <tr><th scope="row"><code>vlite stop-check</code></th><td>The Claude Code Stop hook. Runs the checks and the tamper check. Add <code>--session NAME</code> to run it by hand.</td></tr>
+        <tr><th scope="row"><code>vlite stop-check</code></th><td>The Stop hook for Claude Code and Codex. Runs the checks and the tamper check. Add <code>--session NAME</code> to run it by hand.</td></tr>
         <tr><th scope="row"><code>vlite stamp</code></th><td>Records a <code>verify</code> or <code>code-review</code> result for the current tree, with evidence files.</td></tr>
         <tr><th scope="row"><code>vlite gate</code></th><td>Run by the git hooks. <code>vlite gate report</code> shows what the gate saw.</td></tr>
         <tr><th scope="row"><code>vlite review</code></th><td>One AI review round against <code>REVIEW.md</code> from the base branch.</td></tr>
       </tbody>
     </table>
+    <p>The <code>connect</code> and <code>require-org</code> commands are described in the <a href="manual.html#16-command-reference">manual</a>.</p>
   </div>
 </section>
 
@@ -482,7 +483,7 @@ npm link</code></pre>
     <ul>
       <li><strong>It does not prove your code is right.</strong> It shows that your checks ran on this exact set of files. The checks are only as good as the ones you write.</li>
       <li><strong>A stamp is a speed bump, not proof.</strong> Anyone can write one by hand, and <code>git commit --no-verify</code> skips git hooks. VerdictLite makes these choices visible in logs and trailers. It does not make them impossible.</li>
-      <li><strong>The stop check needs Claude Code.</strong> It uses the Claude Code Stop hook. Other agents get the commit gate only. The tamper check runs inside the stop check.</li>
+      <li><strong>The stop check needs Claude Code or Codex.</strong> It runs as a Stop hook in either app. Other agents do not get the Stop hook automatically; they get the commit gate, and <code>vlite stamp</code> / <code>vlite review</code> are CLI commands any agent can run. The tamper check runs inside the stop check. In Codex, VerdictLite checks the repo the session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</li>
       <li><strong>The tamper check is simple.</strong> It uses regular expressions. It can miss things and can flag lines that are fine.</li>
       <li><strong>If the tool itself breaks, it lets the agent stop.</strong> A failing check always blocks. A crash in VerdictLite does not; it logs an error instead.</li>
       <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.15.</li>
