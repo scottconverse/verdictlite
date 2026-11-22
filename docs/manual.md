@@ -5,8 +5,9 @@ Version 0.1.15. This manual is also on the web at
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
 run your checks before it stops, and it writes down how each commit was checked.
-It works in any git repo. The stop check uses a Claude Code hook. The commit
-gate uses plain git hooks, so it works with any agent and with people too.
+It works in any git repo. The stop check is a Stop hook for Claude Code and
+Codex. The commit gate uses plain git hooks, so it works with any agent and
+with people too.
 
 VerdictLite is an independent project. It is not made by, affiliated with or
 endorsed by Anthropic. It follows the method in the article
@@ -42,9 +43,9 @@ You need:
 - **git.**
 - **Node.js 20 or newer.** Get it from <https://nodejs.org/>.
 - **pnpm**, to build VerdictLite from source. See <https://pnpm.io/installation>.
-- **Claude Code**, if you want the stop check. The stop check is a Claude Code
-  [Stop hook](https://code.claude.com/docs/en/hooks). Other agents get the
-  commit gate only.
+- **Claude Code or Codex**, if you want the stop check. The stop check is a
+  [Stop hook](https://code.claude.com/docs/en/hooks) that runs in either app.
+  Other agents get the commit gate only.
 - **The `claude` command on PATH**, if you want `vlite review` with the default
   settings.
 
@@ -319,11 +320,14 @@ What `--global` does on each stop:
    checked again.
 5. It runs the normal stop check on each repo and sends one combined message.
 
-In folders and repos without a `vlite.json` it prints nothing. It costs about
-one or two seconds per stop on a large transcript.
+In folders and repos without a `vlite.json` it prints nothing, except the
+required-org check below. It costs about one or two seconds per stop on a large
+transcript.
 
 Limit: `--global` does not see a file changed only by a shell command (for
-example `sed -i`), unless the session started inside that repo.
+example `sed -i`), unless the session started inside that repo. In Codex,
+VerdictLite cannot read the session's log, so it checks only the repo the
+session opened in.
 
 ### Step 6. Add a `verify` skill (recommended)
 
@@ -387,7 +391,8 @@ Limits:
 Here is one session from start to end.
 
 1. **The agent edits files.** Nothing happens yet.
-2. **The agent tries to stop.** Claude Code runs `vlite stop-check`.
+2. **The agent tries to stop.** The app (Claude Code or Codex) runs
+   `vlite stop-check`.
 3. **Same files as last pass?** VerdictLite works out the tree id of the whole
    working tree (tracked and untracked files, `.gitignore` respected). If this
    exact tree already passed on this branch, it lets the agent stop at once.
@@ -414,7 +419,8 @@ Here is one session from start to end.
    [section 7](#7-stamps-and-the-verified-by-trailer).
 
 A stop-check pass lets the agent stop. When at least one check ran in full (no
-part was skipped and it was not a narrow run), it also writes a `stop-check`
+part was skipped, the run was not narrow, and no check passed only on the tests
+that failed last time), it also writes a `stop-check`
 stamp for that exact tree, so a commit of the same files shows
 `Verified-By: stop-check`. A pass where no check ran (docs only, or files no part
 covers) writes no stamp.
@@ -854,8 +860,8 @@ Raise `timeoutSec` for the check, and raise the Stop hook `timeout` in
 `timeoutSec` is shown as a warning ("froze, result unknown"), not as a failure.
 
 **Run the stop check by hand.**
-`vlite stop-check --session my-test` runs it without Claude Code. It prints the
-JSON that Claude Code would get, or nothing if it passes.
+`vlite stop-check --session my-test` runs it without an agent app. It prints
+the hook JSON the app would get, or nothing if it passes.
 
 **Uninstall.**
 
@@ -947,7 +953,8 @@ for each module that changed. `{name}` stands for one folder name.
 - Every path of a template part needs `{name}`. So does its `name`, so each
   module's part has its own name.
 - `{name}` is filled in the part's `name`, `paths`, `requires` and `cwd`, and
-  in each check's `run` and `cwd`. Other text in braces is left alone.
+  in each check's `run`, `runFiles` and `cwd`. Other text in braces is left
+  alone.
 - `{name}` in a part whose paths have no `{name}` is an error. `{name}` is the
   only placeholder. A brace token without a comma, such as `{...}`, in `paths`
   is an error.
@@ -1066,7 +1073,7 @@ folder.
 |---|---|
 | `vlite install [--claude] [--uninstall]` | Writes or removes the git hooks. `--claude` prints the Stop hook settings. |
 | `vlite connect [--claude] [--codex] [--uninstall]` | Adds the Stop hook to the Claude Code and Codex desktop apps (user level). With no flag it does both. `--uninstall` removes only the hooks that `vlite connect` wrote. It makes a backup of each file before it changes it. |
-| `vlite stop-check [--session ID] [--global]` | The Claude Code Stop hook. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With `--session` it does not read stdin, for runs by hand. With `--global` it checks the repos the session edited (user-level hook). |
+| `vlite stop-check [--session ID] [--global]` | The Stop hook for Claude Code and Codex. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With `--session` it does not read stdin, for runs by hand. With `--global` it checks the repos the session edited (user-level hook). |
 | `vlite stamp <verify\|code-review> --result <pass\|fail> [--evidence PATH ...] [--note TEXT]` | Writes a stamp for the current working tree. `--evidence` can be given more than once. |
 | `vlite gate pre-commit` | Called by the `pre-commit` hook. Records the method. Never blocks. |
 | `vlite gate commit-msg FILE` | Called by the `commit-msg` hook. Blocks in `enforce` mode and adds the trailer. |
@@ -1098,9 +1105,11 @@ So a change cannot weaken the checks that judge it. A feature branch that edits
 
 **Does it work with agents other than Claude Code?**
 The commit gate, stamps and review are plain git hooks and CLI commands. They
-work with any agent or person. The stop check needs Claude Code's Stop hook,
-and the test-tamper check runs inside the stop check. Other agents get the
-commit gate only. You can still run `vlite stop-check --session NAME` by hand.
+work with any agent or person. The stop check is a Stop hook that runs in
+Claude Code and Codex, and the test-tamper check runs inside the stop check.
+Other agents get the commit gate only. You can still run
+`vlite stop-check --session NAME` by hand. Codex checks only the repo the
+session opened in.
 
 **Does it send my code anywhere?**
 Only `vlite review` does, and only to the review command you set (by default
