@@ -162,3 +162,39 @@ describe('install.ps1 first install detection (FINDING-002)', () => {
     expect(existsSync(join(vhome, 'connect-off.json'))).toBe(false); // a plain connect removes the marker
   }, 180_000);
 });
+
+describe('install.ps1 Update-SessionPath', () => {
+  winOnly('keeps PATH the same size on repeat calls, drops repeats, and keeps session-only entries', () => {
+    const text = readFileSync(SCRIPT, 'utf8');
+    const fn = /function Update-SessionPath \{[\s\S]*?\r?\n\}/.exec(text);
+    expect(fn).not.toBeNull();
+    const base = tempDir('installer-path-');
+    const script = join(base, 'path.ps1');
+    // Only reads the real Machine and User PATH. It sets $env:Path in the child process and nothing else.
+    writeFileSync(script, `${fn?.[0]}
+$env:Path = 'C:\\vlite-only-session\\;c:\\VLITE-ONLY-SESSION;  C:\\vlite-two  ;;C:\\vlite-two\\;' + $env:Path
+Update-SessionPath
+$first = $env:Path
+Update-SessionPath
+Update-SessionPath
+Update-SessionPath
+Write-Output "FIRST=$first"
+Write-Output "LAST=$($env:Path)"
+`);
+    const shells = ['powershell', ...(run('pwsh', ['-NoProfile', '-Command', '1']).code === 0 ? ['pwsh'] : [])];
+    for (const shell of shells) {
+      const r = run(shell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script]);
+      expect(r.code, r.out).toBe(0);
+      const first = /^FIRST=(.*)$/m.exec(r.out)?.[1]?.trim() ?? '';
+      const last = /^LAST=(.*)$/m.exec(r.out)?.[1]?.trim() ?? '';
+      expect(first.length, shell).toBeGreaterThan(0);
+      expect(last, shell).toBe(first);
+      const keys = last.split(';').map((p) => p.trim().replace(/[\\/]+$/, '').toLowerCase());
+      expect(keys.every(Boolean), shell).toBe(true);
+      expect(new Set(keys).size, shell).toBe(keys.length);
+      expect(keys.filter((k) => k === 'c:\\vlite-only-session'), shell).toHaveLength(1);
+      expect(keys.filter((k) => k === 'c:\\vlite-two'), shell).toHaveLength(1);
+      expect(last, shell).toContain('C:\\vlite-only-session\\;'); // first spelling stays, with its slash
+    }
+  }, 60_000);
+});

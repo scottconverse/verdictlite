@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VerdictLite 0.1.13 user manual</title>
-  <meta name="description" content="How to install VerdictLite 0.1.13, set up a repo, read block messages, use stamps, Verify-Skip, gate modes, review and the test-tamper rules. Full vlite.json reference and FAQ.">
+  <title>VerdictLite 0.1.14 user manual</title>
+  <meta name="description" content="How to install VerdictLite 0.1.14, set up a repo, read block messages, use stamps, Verify-Skip, gate modes, review and the test-tamper rules. Full vlite.json reference and FAQ.">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="VerdictLite 0.1.13 user manual">
+  <meta property="og:title" content="VerdictLite 0.1.14 user manual">
   <meta property="og:description" content="Install, repo setup, stop check, stamps, commit gate, review, test-tamper rules, config reference and FAQ.">
   <meta property="og:url" content="https://scottconverse.github.io/verdictlite/manual.html">
   <meta name="twitter:card" content="summary">
@@ -25,7 +25,7 @@
     <a class="brand" href="./" aria-label="VerdictLite home">
       <img src="assets/favicon.svg" alt="" width="26" height="26">
       <span>VerdictLite</span>
-      <span class="ver">v0.1.13</span>
+      <span class="ver">v0.1.14</span>
     </a>
     <nav class="site-nav" aria-label="Main">
       <ul>
@@ -70,7 +70,7 @@
 
   <main id="main" class="doc">
     <header>
-      <p class="eyebrow">Version 0.1.13 &middot; also in the repo as <code>docs/manual.md</code></p>
+      <p class="eyebrow">Version 0.1.14 &middot; also in the repo as <code>docs/manual.md</code></p>
       <h1>VerdictLite user manual</h1>
       <p class="lede">VerdictLite (<code>vlite</code>) is a small command-line tool. It makes an AI coding agent run your checks before it stops, and it writes down how each commit was checked.</p>
     </header>
@@ -369,9 +369,9 @@ Overrides (Verify-Skip): 1
 <p>The <code>.jsonl</code> files are append-only logs, one JSON object per line, with ISO times. You can delete the folder to reset VerdictLite for a repo.</p>
 <h2 id="14-troubleshooting">14. Troubleshooting</h2>
 <p><strong>The tool broke, and the agent stopped anyway.</strong> That is on purpose. If VerdictLite itself fails (not a check, the tool), the stop check prints <code>VerdictLite stop-check internal error (ignored, not blocking): ...</code> and lets the agent stop. It logs <code>"result": "error"</code> in <code>stop.jsonl</code>. A failing <em>check</em> always blocks. A broken <em>tool</em> never does. If VerdictLite itself fails (a broken or mistyped <code>vlite.json</code>, a locked file), it still lets the agent stop, but it now says so: the hook prints a <code>systemMessage</code> that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in <code>vlite.json</code> are an error, so a typo such as <code>"part"</code> is caught. If VerdictLite itself fails (a broken or mistyped <code>vlite.json</code>, a locked file), it still lets the agent stop, but it now says so: the hook prints a <code>systemMessage</code> that Claude Code shows to the person, and the text is added to any block or handoff. Unknown top-level keys in <code>vlite.json</code> are an error, so a typo such as <code>"part"</code> is caught. The same goes for the gate: a broken <code>vlite.json</code> prints <code>VerdictLite gate skipped: ...</code> and lets the commit through.</p>
-<p><strong>"vlite.json is not on the base branch yet".</strong> Merge <code>vlite.json</code> to the base branch and run <code>git fetch</code>. VerdictLite looks for <code>vlite.json</code> on <code>origin/main</code> first, then <code>main</code>. If the file there names another <code>base</code> that has its own <code>vlite.json</code>, that copy is used. If your default branch has another name, such as <code>master</code>, VerdictLite 0.1.13 will not find the config there and stays in bootstrap mode.</p>
+<p><strong>"vlite.json is not on the base branch yet".</strong> Merge <code>vlite.json</code> to the base branch and run <code>git fetch</code>. VerdictLite looks for <code>vlite.json</code> on <code>origin/main</code> first, then <code>main</code>. If the file there names another <code>base</code> that has its own <code>vlite.json</code>, that copy is used. If your default branch has another name, such as <code>master</code>, VerdictLite 0.1.14 will not find the config there and stays in bootstrap mode.</p>
 <p><strong>Nothing happens at all.</strong> With no <code>vlite.json</code> anywhere, every command exits 0 and does nothing. Check that you are in the right repo and that the file is named <code>vlite.json</code>.</p>
-<p><strong>My old git hooks.</strong> <code>vlite install</code> keeps a foreign hook as <code>&lt;name&gt;.vlite-prev</code> and runs it first. If both the hook and a <code>.vlite-prev</code> file already exist, install stops with <code>... is not ours and ... already exists. Move one of them by hand.</code> Merge or move one of them, then run install again. If a hook manager sets <code>core.hooksPath</code>, install writes to that folder. If the manager rewrites the folder later, run <code>vlite install</code> again. VerdictLite 0.1.13 has not been tested with specific hook managers.</p>
+<p><strong>My old git hooks.</strong> <code>vlite install</code> keeps a foreign hook as <code>&lt;name&gt;.vlite-prev</code> and runs it first. If both the hook and a <code>.vlite-prev</code> file already exist, install stops with <code>... is not ours and ... already exists. Move one of them by hand.</code> Merge or move one of them, then run install again. If a hook manager sets <code>core.hooksPath</code>, install writes to that folder. If the manager rewrites the folder later, run <code>vlite install</code> again. VerdictLite 0.1.14 has not been tested with specific hook managers.</p>
 <p><strong>The hooks stopped working after I moved VerdictLite or changed Node.</strong> The hooks call the exact <code>node</code> and <code>dist/cli.js</code> paths from install time. Run <code>vlite install</code> again in each repo.</p>
 <p><strong>My stamp does not count; the trailer says <code>none</code>.</strong> The staged tree must match the tree you stamped. Run <code>git add -A</code>, stamp again and commit. Check that evidence files are ignored by git.</p>
 <p><strong>The stop check is slow.</strong> It hashes the whole working tree each time and runs about 15 git commands. This adds a short wait before any check runs. The time is not measured yet. Large repos take longer. Your checks add their own time.</p>
@@ -435,14 +435,14 @@ Overrides (Verify-Skip): 1
 <p><strong>Does it send my code anywhere?</strong> Only <code>vlite review</code> does, and only to the review command you set (by default the <code>claude</code> CLI). The other commands run on your machine.</p>
 <p><strong>Do I have to use <code>vlite review</code>?</strong> No. A <code>verify</code> stamp alone gives the method <code>verify</code>.</p>
 <p><strong>Is this made by Anthropic?</strong> No. It is an independent project that follows a method Anthropic's Claude Code team described in public.</p>
-<p><strong>What state is the project in?</strong> Early. Version 0.1.13 is the thirteenth fix to the first release (0.1.0), built on 2026-11-21. It has 240 automated tests (4 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes. Report problems at <a href="https://github.com/scottconverse/verdictlite/issues">https://github.com/scottconverse/verdictlite/issues</a>.</p>
+<p><strong>What state is the project in?</strong> Early. Version 0.1.14 is the fourteenth fix to the first release (0.1.0), built on 2026-11-21. It has 179 automated tests (6 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes. Report problems at <a href="https://github.com/scottconverse/verdictlite/issues">https://github.com/scottconverse/verdictlite/issues</a>.</p>
   </main>
 </div>
 
 <footer class="site-footer">
   <div class="wrap cols">
     <div>
-      <p><strong>VerdictLite 0.1.13</strong>. Licensed under Apache-2.0.</p>
+      <p><strong>VerdictLite 0.1.14</strong>. Licensed under Apache-2.0.</p>
       <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. Claude and Claude Code are products of Anthropic.</p>
       <p>Method credit: <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a>, Addy Osmani, November 16, 2026.</p>
     </div>
