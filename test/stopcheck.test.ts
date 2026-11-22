@@ -626,18 +626,21 @@ describe('rerun only the failed tests', () => {
     expect(s.runs()).toEqual(['FULL', 'FULL']);
   });
 
-  it('clears saved failed tests when the change is undone, so a new change runs in full', () => {
+  it('clears saved failed tests when the change is undone to a tree that already passed, so a new change runs in full', () => {
     const s = rerunSetup();
     s.r.write('src/app.js', 'v2\n');
+    stopNow(s.r); // a full pass on tree P
+    s.r.commitAll('P');
     failA(s);
     stopNow(s.r);
     expect(stateOf(s.r)['failedTests']).toBeDefined();
-    s.r.git('checkout', '--', '.');
-    expect(stopNow(s.r)['decision']).toBeUndefined(); // nothing changed: a pass
+    s.r.git('checkout', '--', '.'); // the tree is P again
+    expect(stopNow(s.r)['decision']).toBeUndefined();
     expect(stateOf(s.r)['failedTests']).toBeUndefined();
     s.r.write('src/app.js', 'v3\n');
     const res = stopNow(s.r);
-    expect(s.runs()).toEqual(['FULL', 'FULL']);
+    // the broken test ran narrow (existing mode); the new product change must run in full, not rerun the stale ids
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_a.py', 'FULL']);
     expect(res['systemMessage']).toBeUndefined();
   });
 

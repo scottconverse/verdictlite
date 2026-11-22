@@ -194,6 +194,14 @@ function emit(verdicts: Verdict[]): void {
   else if (warn) out({ systemMessage: warn });
 }
 
+/** Removes the saved failed tests of one branch, and the whole field when nothing is left. */
+function dropFailed(s: State, branch: string): void {
+  if (!s.failedTests) return;
+  const { [branch]: _gone, ...rest } = s.failedTests;
+  if (Object.keys(rest).length > 0) s.failedTests = rest;
+  else delete s.failedTests;
+}
+
 /** Saves a state change. A failed save is reported on stderr and never drops a block or a pass. */
 function saveState(dir: string, mutate: (s: State) => void): boolean {
   try {
@@ -214,7 +222,11 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const skippedHere = state.skippedPass?.[branch];
   if (skippedHere && skippedHere.tree === tree) return { kind: 'warn', message: skippedHere.message };
   const last = state.lastPassTree?.[branch];
-  if (last === tree) return { kind: 'pass' };
+  if (last === tree) {
+    // Back on a tree that already passed: failed tests saved from the undone change are stale.
+    if (state.failedTests?.[branch]) saveState(ctx.stateDir, (s) => dropFailed(s, branch));
+    return { kind: 'pass' };
+  }
 
   // A saved pass is a start point only if it still belongs to this line of work: no pass head saved (older state),
   // HEAD unchanged, or HEAD is a descendant whose tree is exactly the passed tree (the passed work was committed).
