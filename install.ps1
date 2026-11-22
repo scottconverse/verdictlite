@@ -53,7 +53,18 @@ function Have([string]$name) { return [bool](Get-Command $name -ErrorAction Sile
 function Update-SessionPath {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = (@($machine, $user, $env:Path) | Where-Object { $_ }) -join ';'
+    # Machine, then user, then what this session already has. Empty entries and repeats go, so a second run
+    # in the same PowerShell does not double PATH. Same entry = same text without case, edge spaces or a
+    # trailing slash. The first spelling stays. The user and machine PATH are only read, never changed.
+    $seen = @{}
+    $kept = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in (@($machine, $user, $env:Path) -join ';') -split ';') {
+        $key = $entry.Trim().TrimEnd('\', '/').ToLowerInvariant()
+        if (-not $key -or $seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $kept.Add($entry.Trim())
+    }
+    $env:Path = $kept -join ';'
 }
 
 function Add-UserPath([string]$dir) {

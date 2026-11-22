@@ -1,6 +1,6 @@
 {
   "name": "verdictlite",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "VerdictLite (vlite): verification gates for AI coding agents in a git repo",
   "license": "Apache-2.0",
   "type": "module",
