@@ -626,6 +626,21 @@ describe('rerun only the failed tests', () => {
     expect(s.runs()).toEqual(['FULL', 'FULL']);
   });
 
+  it('clears saved failed tests when the change is undone, so a new change runs in full', () => {
+    const s = rerunSetup();
+    s.r.write('src/app.js', 'v2\n');
+    failA(s);
+    stopNow(s.r);
+    expect(stateOf(s.r)['failedTests']).toBeDefined();
+    s.r.git('checkout', '--', '.');
+    expect(stopNow(s.r)['decision']).toBeUndefined(); // nothing changed: a pass
+    expect(stateOf(s.r)['failedTests']).toBeUndefined();
+    s.r.write('src/app.js', 'v3\n');
+    const res = stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+    expect(res['systemMessage']).toBeUndefined();
+  });
+
   it('the existing narrow mode still runs only the changed test files', () => {
     const s = rerunSetup();
     s.r.write('src/app.js', 'v2\n');

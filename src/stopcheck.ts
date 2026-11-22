@@ -241,8 +241,8 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
           const { [branch]: _gone, ...rest } = s.skippedPass;
           s.skippedPass = rest;
         }
-        // A real full pass: failed tests saved earlier are done with, but a narrow run is not a full run.
-        if (s.failedTests && ((extra as { ran?: string[] }).ran?.length ?? 0) > 0 && !(extra as { narrow?: object }).narrow) {
+        // A real full pass, or no code change left (undone or docs only): failed tests saved earlier are done with. A narrow run is not a full run.
+        if (s.failedTests && ((extra as { docsOnly?: boolean }).docsOnly || (((extra as { ran?: string[] }).ran?.length ?? 0) > 0 && !(extra as { narrow?: object }).narrow))) {
           const { [branch]: _done, ...rest } = s.failedTests;
           if (Object.keys(rest).length > 0) s.failedTests = rest;
           else delete s.failedTests;
