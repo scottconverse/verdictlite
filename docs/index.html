@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VerdictLite: make the coding agent run the checks</title>
-  <meta name="description" content="VerdictLite (vlite) is a small CLI for git repos. It runs your checks when a Claude Code agent tries to stop, flags skipped or deleted tests, and records how each commit was verified. Version 0.1.14, Apache-2.0.">
+  <meta name="description" content="VerdictLite (vlite) is a small CLI for git repos. It runs your checks when a Claude Code agent tries to stop, flags skipped or deleted tests, and records how each commit was verified. Version 0.1.15, Apache-2.0.">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="VerdictLite 0.1.14: make the coding agent run the checks">
+  <meta property="og:title" content="VerdictLite 0.1.15: make the coding agent run the checks">
   <meta property="og:description" content="A small CLI for git repos. Runs your checks when the agent tries to stop, flags skipped or deleted tests, and marks each commit with how it was verified.">
   <meta property="og:url" content="https://scottconverse.github.io/verdictlite/">
   <meta name="twitter:card" content="summary">
@@ -25,7 +25,7 @@
     <a class="brand" href="./" aria-label="VerdictLite home">
       <img src="assets/favicon.svg" alt="" width="26" height="26">
       <span>VerdictLite</span>
-      <span class="ver">v0.1.14</span>
+      <span class="ver">v0.1.15</span>
     </a>
     <nav class="site-nav" aria-label="Main">
       <ul>
@@ -46,7 +46,7 @@
 <section class="hero" aria-labelledby="hero-title">
   <div class="wrap hero-grid">
     <div>
-      <p class="eyebrow">v0.1.14 &middot; early release &middot; Apache-2.0</p>
+      <p class="eyebrow">v0.1.15 &middot; early release &middot; Apache-2.0</p>
       <h1 id="hero-title">Make the coding agent run the checks before it stops.</h1>
       <p class="lede">VerdictLite is a small command-line tool for git repos. When a Claude Code agent tries to stop, it runs your checks. It flags tests that were skipped or deleted. At commit time it writes down how the change was verified.</p>
       <div class="actions">
@@ -83,7 +83,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
 <div class="facts" role="region" aria-label="Project facts">
   <div class="wrap">
     <ul>
-      <li><strong>Version 0.1.14</strong>Early release</li>
+      <li><strong>Version 0.1.15</strong>Early release</li>
       <li><strong>Node.js 20+</strong>TypeScript CLI, ESM</li>
       <li><strong>Zero runtime dependencies</strong>Only dev tools to build</li>
       <li><strong>268 automated tests</strong>CI on Ubuntu and Windows</li>
@@ -476,7 +476,7 @@ npm link</code></pre>
       <h2 id="limits-title">What it does not do.</h2>
       <div class="status-card">
         <h3>Status: early</h3>
-        <p>Version 0.1.14 is the fourteenth fix to the first release (0.1.0), built on 2026-11-21. It has 268 automated tests (6 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes.</p>
+        <p>Version 0.1.15 is the fifteenth fix to the first release (0.1.0), built on 2026-11-21. It has 268 automated tests (6 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first real repo now. Expect changes.</p>
         <p>Found a problem? <a href="https://github.com/scottconverse/verdictlite/issues">Open an issue</a>.</p>
       </div>
     </div>
@@ -486,7 +486,7 @@ npm link</code></pre>
       <li><strong>The stop check needs Claude Code.</strong> It uses the Claude Code Stop hook. Other agents get the commit gate only. The tamper check runs inside the stop check.</li>
       <li><strong>The tamper check is simple.</strong> It uses regular expressions. It can miss things and can flag lines that are fine.</li>
       <li><strong>If the tool itself breaks, it lets the agent stop.</strong> A failing check always blocks. A crash in VerdictLite does not; it logs an error instead.</li>
-      <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.14.</li>
+      <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.15.</li>
       <li><strong><code>vlite review</code> sends your diff</strong> to the review command you set, by default the <code>claude</code> CLI. The other commands run only on your machine.</li>
     </ul>
   </div>
@@ -512,7 +512,7 @@ npm link</code></pre>
 <footer class="site-footer">
   <div class="wrap cols">
     <div>
-      <p><strong>VerdictLite 0.1.14</strong>. Licensed under Apache-2.0.</p>
+      <p><strong>VerdictLite 0.1.15</strong>. Licensed under Apache-2.0.</p>
       <p>VerdictLite is an independent project. It is not made by, affiliated with or endorsed by Anthropic. Claude and Claude Code are products of Anthropic.</p>
       <p>Method credit: <a href="https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/">How the Claude Code team thinks about verification</a>, Addy Osmani, November 16, 2026.</p>
     </div>
