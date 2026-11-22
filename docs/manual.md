@@ -1012,6 +1012,39 @@ A check can opt in to a narrow form with `runFiles`:
   pass of that part. `stop.jsonl` has `narrow` and `deleted`.
 - The test-tamper check and the round count work as before.
 
+### How to: rerun only the tests that failed
+
+When a check that has `runFiles` fails, the agent should fix those tests and
+rerun only those tests, not the whole suite. The full run stays for CI and
+commit proof.
+
+- VerdictLite reads the failed tests from the output and saves them for that
+  branch and check. It knows pytest (`FAILED <id>` and `ERROR <path>` lines, the
+  ` - message` part is dropped) and vitest or jest (` FAIL <file>`, the file is
+  kept). It strips colours first.
+- It saves nothing when the format is unknown, when no test is named, when more
+  than 50 tests failed, or when an id starts with `-`, has a line break, or
+  names a file that does not exist. The next stop then runs in full.
+- The block message adds one line: fix these tests, then check the fix by
+  running only this command (the `runFiles` command with the ids). Do not run
+  the full test suite; CI runs it.
+- At the next stop, a check with saved tests runs `runFiles` with only those
+  tests. This comes before the "only test files changed" mode. Other checks in
+  the part run as before. If a saved file is gone, the check runs in full.
+- If they still fail, it is a normal failure: the round counts and the new
+  failed tests are saved. If the command fails but names no test (for example
+  when the runner exits with code 5), the full check runs at once in the same
+  stop and that result counts.
+- If they pass, the agent sees a warning that names the tests, says the full
+  check did not run, and says CI or `vlite stamp verify` gives the full proof.
+  This is not a pass: no stamp is written, the start point does not move, and
+  the part is not marked as passed. The same tree repeats the warning and runs
+  nothing. The saved tests are cleared, so the next stop on a changed tree runs
+  the check in full.
+- A real full pass clears the saved tests of the branch.
+- The limit: a command with `-x` stops at the first failure, so it records one
+  test at a time.
+
 ## 16. Command reference
 
 Every command takes `--repo DIR`. The default is the current folder.
@@ -1066,7 +1099,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.14 is the fourteenth fix to the first release (0.1.0), built on 2026-11-21. It has 249
+Early. Version 0.1.14 is the fourteenth fix to the first release (0.1.0), built on 2026-11-21. It has 267
 automated tests (6 run on Windows only); the rest run on Ubuntu and Windows. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

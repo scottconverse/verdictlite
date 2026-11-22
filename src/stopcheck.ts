@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { FILES_TOKEN as FILES, type Part } from './config.js';
 import { allDocs, type Ctx, isDocs, openRepo } from './context.js';
+import { failedIdsOf, idsAreSafe, idsCommand } from './failed.js';
 import { matchAny } from './glob.js';
 import { baseTree, changedFiles, diffText, existsAt, git, headSha, isAncestorOfHead, isTree, repoRoot, stateKey, worktreeTree } from './git.js';
 import { planParts } from './parts.js';
@@ -29,6 +30,10 @@ interface Failure {
   output: string;
   /** Set when only the changed test files were run instead of the whole check. */
   narrow?: { files: string[]; deleted: string[]; since: string };
+  /** Set when only the tests that failed last time were run. */
+  rerun?: string[];
+  /** The failed tests saved for the next stop, and the command that reruns only them. */
+  saved?: { ids: string[]; command: string };
 }
 
 /** How one part will run: its changed test files since the part last passed, or the reason it runs in full. */
@@ -189,6 +194,14 @@ function emit(verdicts: Verdict[]): void {
   else if (warn) out({ systemMessage: warn });
 }
 
+/** Removes the saved failed tests of one branch, and the whole field when nothing is left. */
+function dropFailed(s: State, branch: string): void {
+  if (!s.failedTests) return;
+  const { [branch]: _gone, ...rest } = s.failedTests;
+  if (Object.keys(rest).length > 0) s.failedTests = rest;
+  else delete s.failedTests;
+}
+
 /** Saves a state change. A failed save is reported on stderr and never drops a block or a pass. */
 function saveState(dir: string, mutate: (s: State) => void): boolean {
   try {
@@ -209,7 +222,11 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const skippedHere = state.skippedPass?.[branch];
   if (skippedHere && skippedHere.tree === tree) return { kind: 'warn', message: skippedHere.message };
   const last = state.lastPassTree?.[branch];
-  if (last === tree) return { kind: 'pass' };
+  if (last === tree) {
+    // Back on a tree that already passed: failed tests saved from the undone change are stale.
+    if (state.failedTests?.[branch]) saveState(ctx.stateDir, (s) => dropFailed(s, branch));
+    return { kind: 'pass' };
+  }
 
   // A saved pass is a start point only if it still belongs to this line of work: no pass head saved (older state),
   // HEAD unchanged, or HEAD is a descendant whose tree is exactly the passed tree (the passed work was committed).
@@ -224,7 +241,7 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const base = { session, tree, branch, from, changed: changed.length, hookActive };
 
   const pass = (extra: object, warning?: string): void => {
-    const skippedRun = !!(extra as { skipped?: object }).skipped;
+    const skippedRun = !!(extra as { skipped?: object }).skipped || !!(extra as { failedOnly?: object }).failedOnly;
     saveState(ctx.stateDir, (s) => {
       if (skippedRun) {
         // A run with a skipped part is not a pass: the start point stays, so the skipped files are judged again later.
@@ -236,6 +253,12 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
           const { [branch]: _gone, ...rest } = s.skippedPass;
           s.skippedPass = rest;
         }
+        // A real full pass, or no code change left (undone or docs only): failed tests saved earlier are done with. A narrow run is not a full run.
+        if (s.failedTests && ((extra as { docsOnly?: boolean }).docsOnly || (((extra as { ran?: string[] }).ran?.length ?? 0) > 0 && !(extra as { narrow?: object }).narrow))) {
+          const { [branch]: _done, ...rest } = s.failedTests;
+          if (Object.keys(rest).length > 0) s.failedTests = rest;
+          else delete s.failedTests;
+        }
       }
       // This session's rounds on this branch, and its old-format keys (one key per set of failing checks).
       for (const k of Object.keys(s.rounds)) if (k === roundKey(session, branch) || (k.startsWith(`${session}|`) && !k.startsWith(`${session}|branch:`))) delete s.rounds[k];
@@ -243,8 +266,8 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     ctx.log('stop', { ...base, result: 'pass', ...extra });
     // A pass on this exact tree counts as proof at commit, but only when a check really ran in full: no part skipped,
     // and no narrow run (only the changed test files ran, which is not proof). A failed stamp write never turns a pass into an error.
-    const e = extra as { ran?: string[]; skipped?: object; narrow?: object };
-    if (!e.ran || e.ran.length === 0 || e.skipped || e.narrow) return;
+    const e = extra as { ran?: string[]; skipped?: object; narrow?: object; failedOnly?: object };
+    if (!e.ran || e.ran.length === 0 || e.skipped || e.narrow || e.failedOnly) return;
     try {
       writeStamp(ctx, 'stop-check', 'pass', [], 'stop-check pass', tree);
     } catch (e) {
@@ -268,6 +291,9 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const ran: string[] = [];
   const skipped: Record<string, string> = {};
   const narrowRuns: Record<string, string[]> = {};
+  const failedOnly: Record<string, string[]> = {}; // checks that passed after rerunning only their failed tests
+  const failedSave: Record<string, string[] | null> = {}; // failed tests to save for the next stop; null clears
+  const failedClear: string[] = []; // checks that passed in full
   const deletedFiles: string[] = [];
   const notes: string[] = [];
   const passedParts: string[] = [];
@@ -299,43 +325,97 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     if (note) notes.push(note);
     if (narrow && narrow.deleted.length > 0) deletedFiles.push(...narrow.deleted.map((d) => `${d} (deleted, not run)`));
     let allPassed = true;
+    let partial = false; // a check passed only on its failed tests: the part is not passed
     for (const check of part.checks) {
       const name = `${part.name}/${check.name}`;
       ran.push(name);
+      const cwd = resolve(root, check.cwd);
       let command = check.run;
       let used: Failure['narrow'];
-      if (narrow && check.runFiles) {
+      let rerun: string[] | undefined;
+      const savedIds = state.failedTests?.[branch]?.[name]?.ids;
+      // The tests that failed last time come first. A file that is gone since then means a full run.
+      if (check.runFiles && savedIds && idsAreSafe(savedIds, cwd)) {
+        rerun = savedIds;
+        command = idsCommand(check.runFiles, savedIds);
+      } else if (narrow && check.runFiles) {
         command = narrowCommand(root, check.cwd, check.runFiles, narrow.files);
         used = { files: narrow.files, deleted: narrow.deleted, since: narrow.since };
         narrowRuns[name] = narrow.files;
       } else if (narrow) {
         notes.push(`VerdictLite: ${name} has no "runFiles", so it ran in full.`);
       }
-      const r = await runShell(command, resolve(root, check.cwd), check.timeoutSec);
-      if (r.code === 0 && !r.timedOut) continue;
+      let r = await runShell(command, cwd, check.timeoutSec);
+      if (rerun && r.code !== 0 && !r.timedOut && !failedIdsOf(r.output, cwd)) {
+        // It failed but named no test (a renamed test, a usage error): the result says nothing, so run the whole check now.
+        notes.push(`VerdictLite: ${name} failed on its saved failed tests without naming a failed test, so it ran in full.`);
+        rerun = undefined;
+        command = check.run;
+        r = await runShell(command, cwd, check.timeoutSec);
+      }
+      if (r.code === 0 && !r.timedOut) {
+        if (rerun) {
+          failedOnly[name] = rerun;
+          failedSave[name] = null;
+          partial = true;
+        } else if (check.runFiles && !used) {
+          failedClear.push(name);
+        }
+        continue;
+      }
       allPassed = false;
       // A frozen check says nothing about the code: it is no result, not a failure. The part is not marked passed.
       if (r.timedOut) timeouts.push({ check: name, seconds: check.timeoutSec });
-      else failures.push({ check: name, command, code: r.code, output: r.output, ...(used ? { narrow: used } : {}) });
+      else {
+        const ids = check.runFiles ? failedIdsOf(r.output, cwd) : null;
+        if (check.runFiles) failedSave[name] = ids;
+        failures.push({
+          check: name,
+          command,
+          code: r.code,
+          output: r.output,
+          ...(used ? { narrow: used } : {}),
+          ...(rerun ? { rerun } : {}),
+          ...(ids && check.runFiles ? { saved: { ids, command: idsCommand(check.runFiles, ids) } } : {}),
+        });
+      }
       break; // first failing check per part; other parts still run
     }
-    if (allPassed) passedParts.push(part.name);
+    if (allPassed && !partial) passedParts.push(part.name);
   }
   // A part that passed is remembered even when another part failed in this run.
-  if (passedParts.length > 0) {
+  const failedKeys = Object.keys(failedSave);
+  if (passedParts.length > 0 || failedKeys.length > 0 || failedClear.length > 0) {
     saveState(ctx.stateDir, (s) => {
-      s.partPassTree = { ...s.partPassTree, [branch]: { ...s.partPassTree?.[branch], ...Object.fromEntries(passedParts.map((p) => [p, tree])) } };
+      if (passedParts.length > 0) {
+        s.partPassTree = { ...s.partPassTree, [branch]: { ...s.partPassTree?.[branch], ...Object.fromEntries(passedParts.map((p) => [p, tree])) } };
+      }
+      if (failedKeys.length > 0 || failedClear.length > 0) {
+        const mine = { ...s.failedTests?.[branch] };
+        for (const n of failedClear) delete mine[n];
+        for (const [n, ids] of Object.entries(failedSave)) {
+          if (ids) mine[n] = { ids };
+          else delete mine[n];
+        }
+        const all = { ...s.failedTests };
+        if (Object.keys(mine).length > 0) all[branch] = mine;
+        else delete all[branch];
+        if (Object.keys(all).length > 0) s.failedTests = all;
+        else delete s.failedTests;
+      }
     });
   }
 
   const extra = {
     ...(Object.keys(skipped).length > 0 ? { skipped } : {}),
     ...(Object.keys(narrowRuns).length > 0 ? { narrow: narrowRuns, deleted: deletedFiles } : {}),
+    ...(Object.keys(failedOnly).length > 0 ? { failedOnly } : {}),
     ...(notes.length > 0 ? { notes } : {}),
   };
   // What ran narrow or in full, one line each, so the person sees it.
   const info = [
     ...Object.entries(narrowRuns).map(([n, files]) => `VerdictLite: ${n} ran only the changed test files (${files.join(', ')}), because product code is unchanged since the last pass of its part.`),
+    ...Object.entries(failedOnly).map(([n, ids]) => `VerdictLite: ${n} reran only the tests that failed last time (${ids.join(', ')}). The full check did NOT run, so this is not proof. CI or "vlite stamp verify" gives the full proof.`),
     ...deletedFiles.map((d) => `VerdictLite: ${d}`),
     ...notes,
   ];
@@ -401,7 +481,9 @@ function describe(f: Failure): string {
   const narrow = f.narrow
     ? `\nOnly these test files ran: ${f.narrow.files.join(', ')}.${f.narrow.deleted.length > 0 ? ` Deleted, not run: ${f.narrow.deleted.join(', ')}.` : ''} The rest of the part's tests were skipped because product code is unchanged since the last pass of this part (tree ${f.narrow.since.slice(0, 8)}).`
     : '';
-  return `[${f.check}] failed\ncommand: ${f.command}\n${status}${narrow}\nlast lines of output:\n${lastLines(f.output, 60)}`;
+  const rerun = f.rerun ? `\nOnly the tests that failed last time ran: ${f.rerun.join(', ')}. The rest of the check was skipped.` : '';
+  const saved = f.saved ? `\nFix these tests, then check the fix by running only this command: ${f.saved.command}\nDo not run the full test suite; CI runs it.` : '';
+  return `[${f.check}] failed\ncommand: ${f.command}\n${status}${narrow}${rerun}\nlast lines of output:\n${lastLines(f.output, 60)}${saved}`;
 }
 
 /** Writes the full output (the handoff file a person reads) and returns its path. */

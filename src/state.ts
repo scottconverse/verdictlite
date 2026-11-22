@@ -18,6 +18,8 @@ export interface State {
   partPassTree?: Record<string, Record<string, string>>;
   /** Per branch key: a run that skipped a part. Its tree repeats the warning at each stop; it never moves lastPassTree. */
   skippedPass?: Record<string, { tree: string; message: string }>;
+  /** Per branch key, per "part/check": the failed tests of its last failing run. Missing in older state. The next stop reruns only these. */
+  failedTests?: Record<string, Record<string, { ids: string[] }>>;
   rounds: Record<string, number>;
   pending: Record<string, Pending>;
   blocks: string[];

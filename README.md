@@ -319,6 +319,17 @@ helper, fixture or `conftest.py` there forces the full check. A narrow pass
 writes no `stop-check` stamp, so it is not commit proof. The message says the
 commit gate needs a full check or `vlite stamp verify`.
 
+**After a failure, only the failed tests rerun.** When a check with `runFiles`
+fails, VerdictLite reads the failed tests from its output (pytest `FAILED` and
+`ERROR` lines, vitest and jest `FAIL` lines) and saves them. The block message
+then gives the agent one command that runs only those tests. At the next stop,
+that check runs only the saved tests. If they pass, the agent sees a warning:
+the full check did not run, so it is not proof, and no stamp is written. CI or
+`vlite stamp verify` gives the full proof. The next stop on a changed tree runs
+the check in full again. If the output has no failed test names, or a test file
+is gone, the check runs in full. A command with `-x` stops at the first
+failure, so it records one test at a time.
+
 If VerdictLite itself breaks, it logs the error and lets the agent stop. A
 failing check always blocks.
 
@@ -618,7 +629,7 @@ Delete the folder to reset VerdictLite for a repo.
 Early. Version 0.1.14 is the fourteenth fix to the first release (0.1.0), built on 2026-11-21. It is being set
 up on its first real repo now. Expect changes.
 
-- 249 automated tests (6 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
+- 267 automated tests (6 of them run on Windows only). CI runs lint, build and tests on Ubuntu and Windows.
 - Not published to npm.
 - Report problems at <https://github.com/scottconverse/verdictlite/issues>.
 

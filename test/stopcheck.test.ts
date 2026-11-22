@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { baseConfig, CHECK_SCRIPT, lastJson, makeRepo, type Repo } from './helpers.js';
+import { tempDir } from './root.js';
 
 function setup(extra: object = {}): Repo {
   return makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n', 'tests/test_a.py': 'def test_a():\n    assert True\n' }, baseConfig(extra));
@@ -464,5 +465,192 @@ describe('stop-check rounds (finding 008)', () => {
     r.write('F3', 'y\n');
     expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
     expect((JSON.parse(readFileSync(file, 'utf8')) as { rounds: object }).rounds).toEqual({});
+  });
+});
+
+/** A fake test runner. FULL scans tests/*.py; IDS runs only the ids it is given. FAILME prints a pytest line, WEIRD prints nothing a parser knows, RENAMED exits 5 when given ids. */
+const RUNNER = `import { appendFileSync, readdirSync, readFileSync } from 'node:fs';
+const [out, mode, ...args] = process.argv.slice(2);
+appendFileSync(out, mode + ' ' + args.join(',') + '\\n');
+const files = mode === 'FULL' ? readdirSync('tests').filter((f) => f.endsWith('.py')).map((f) => 'tests/' + f) : args;
+let bad = false;
+for (const a of files) {
+  const f = a.split('::')[0];
+  const t = readFileSync(f, 'utf8');
+  if (t.includes('RENAMED') && mode !== 'FULL') { console.log('no tests ran'); process.exit(5); }
+  if (t.includes('WEIRD')) { console.log('something broke'); bad = true; }
+  if (t.includes('FAILME')) { console.log('FAILED ' + f + '::test_x - boom'); bad = true; }
+}
+process.exit(bad ? 1 : 0);
+`;
+
+const TEST_OK = 'def test_x():\n    assert True\n';
+
+interface RerunSetup {
+  r: Repo;
+  runs(): string[];
+}
+
+function rerunSetup(withRunFiles = true): RerunSetup {
+  const out = join(tempDir('runs-'), 'runs.log').replace(/\\/g, '/');
+  const check: Record<string, unknown> = { name: 'tests', run: `node rec.mjs ${out} FULL`, timeoutSec: 60 };
+  if (withRunFiles) check['runFiles'] = `node rec.mjs ${out} IDS {files}`;
+  const r = makeRepo(
+    { 'rec.mjs': RUNNER, 'src/app.js': 'v1\n', 'tests/test_a.py': TEST_OK, 'tests/test_b.py': TEST_OK },
+    baseConfig({ parts: [{ name: 'app', paths: ['src/**', 'tests/**'], checks: [check] }], gate: { mode: 'observe' } }),
+  );
+  return { r, runs: () => (existsSync(out) ? readFileSync(out, 'utf8').trim().split('\n').map((l) => l.trimEnd()) : []) };
+}
+
+const stopNow = (r: Repo): Record<string, unknown> => {
+  const res = r.vlite(['stop-check', '--session', 's']);
+  return res.out.trim() ? lastJson(res.out) : {};
+};
+
+const stateOf = (r: Repo): Record<string, unknown> => JSON.parse(readFileSync(join(stateFolder(r), 'state.json'), 'utf8')) as Record<string, unknown>;
+const stampFile = (r: Repo): string => join(stateFolder(r), 'stamps.jsonl');
+
+describe('rerun only the failed tests', () => {
+  const failA = (s: RerunSetup): void => s.r.write('tests/test_a.py', `${TEST_OK}# FAILME\n`);
+  const fixA = (s: RerunSetup): void => s.r.write('tests/test_a.py', `${TEST_OK}# fixed\n`);
+
+  it('saves the failed tests, tells the agent the narrow command, then reruns only them', () => {
+    const s = rerunSetup();
+    failA(s);
+    const block = stopNow(s.r);
+    expect(block['decision']).toBe('block');
+    const reason = String(block['reason']);
+    expect(reason).toContain('check the fix by running only this command: node rec.mjs');
+    expect(reason).toContain('IDS tests/test_a.py::test_x');
+    expect(reason).toContain('Do not run the full test suite; CI runs it.');
+    expect(JSON.stringify(stateOf(s.r)['failedTests'])).toContain('tests/test_a.py::test_x');
+    fixA(s);
+    const warn = stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_a.py::test_x']);
+    expect(String(warn['systemMessage'])).toContain('reran only the tests that failed last time (tests/test_a.py::test_x)');
+    expect(String(warn['systemMessage'])).toContain('The full check did NOT run');
+    expect(String(warn['systemMessage'])).toContain('vlite stamp verify');
+  });
+
+  it('a rerun that still fails is a normal failure with a new round and saved ids', () => {
+    const s = rerunSetup();
+    failA(s);
+    stopNow(s.r);
+    s.r.write('tests/test_a.py', `${TEST_OK}# FAILME again\n`);
+    const two = stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_a.py::test_x']);
+    const reason = String(two['reason']);
+    expect(reason).toContain('Round 2 of 3');
+    expect(reason).toContain('Only the tests that failed last time ran: tests/test_a.py::test_x');
+    expect(JSON.stringify(stateOf(s.r)['failedTests'])).toContain('tests/test_a.py::test_x');
+  });
+
+  it('a pass after a failed-only rerun gives a warning, no stamp, no moved start point, and no rerun on the same tree', () => {
+    const s = rerunSetup();
+    s.r.write('src/app.js', 'v2\n');
+    stopNow(s.r); // a full pass: the start point and a stamp
+    const before = stateOf(s.r);
+    const stampsBefore = readFileSync(stampFile(s.r), 'utf8');
+    failA(s);
+    stopNow(s.r);
+    fixA(s);
+    const first = stopNow(s.r);
+    expect(String(first['systemMessage'])).toContain('not proof');
+    const st = stateOf(s.r);
+    expect(st['lastPassTree']).toEqual(before['lastPassTree']);
+    expect(st['lastPassHead']).toEqual(before['lastPassHead']);
+    expect(st['partPassTree']).toEqual(before['partPassTree']);
+    expect(st['failedTests']).toBeUndefined();
+    expect(Object.keys(st['rounds'] as object)).toHaveLength(0);
+    expect(readFileSync(stampFile(s.r), 'utf8')).toBe(stampsBefore);
+    const count = s.runs().length;
+    const again = stopNow(s.r);
+    expect(s.runs()).toHaveLength(count); // same tree: nothing reruns
+    expect(again['systemMessage']).toBe(first['systemMessage']);
+  });
+
+  it('after that warning, a changed tree runs the check in full and a full pass writes the stamp', () => {
+    const s = rerunSetup();
+    failA(s);
+    stopNow(s.r);
+    fixA(s);
+    stopNow(s.r);
+    s.r.write('src/app.js', 'v2\n');
+    const res = stopNow(s.r);
+    expect(s.runs().at(-1)).toBe('FULL');
+    expect(res['systemMessage']).toBeUndefined();
+    expect(stateOf(s.r)['lastPassTree']).toBeDefined();
+    expect(readFileSync(stampFile(s.r), 'utf8').trim().split('\n')).toHaveLength(1);
+  });
+
+  it('records nothing when the output is not a known format, so the next stop runs in full', () => {
+    const s = rerunSetup();
+    s.r.write('tests/test_a.py', `${TEST_OK}# WEIRD\n`);
+    const block = stopNow(s.r);
+    expect(String(block['reason'])).not.toContain('running only this command');
+    expect(stateOf(s.r)['failedTests']).toBeUndefined();
+    s.r.write('tests/test_a.py', `${TEST_OK}# WEIRD2\n`);
+    stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+  });
+
+  it('a failed rerun that names no test (exit 5) runs the full check in the same stop', () => {
+    const s = rerunSetup();
+    failA(s);
+    stopNow(s.r);
+    s.r.write('tests/test_a.py', `${TEST_OK}# RENAMED\n`);
+    const res = stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_a.py::test_x', 'FULL']);
+    expect(String(res['systemMessage'])).toContain('without naming a failed test, so it ran in full');
+    expect(stateOf(s.r)['failedTests']).toBeUndefined();
+    expect(stateOf(s.r)['lastPassTree']).toBeDefined(); // the full result counts: a real pass
+  });
+
+  it('runs in full when a saved test file is gone', () => {
+    const s = rerunSetup();
+    failA(s);
+    stopNow(s.r);
+    rmSync(join(s.r.dir, 'tests/test_a.py'));
+    stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+  });
+
+  it('a check with no runFiles is unchanged: nothing saved, always full', () => {
+    const s = rerunSetup(false);
+    failA(s);
+    const block = stopNow(s.r);
+    expect(String(block['reason'])).not.toContain('running only this command');
+    expect(stateOf(s.r)['failedTests']).toBeUndefined();
+    fixA(s);
+    stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'FULL']);
+  });
+
+  it('clears saved failed tests when the change is undone to a tree that already passed, so a new change runs in full', () => {
+    const s = rerunSetup();
+    s.r.write('src/app.js', 'v2\n');
+    stopNow(s.r); // a full pass on tree P
+    s.r.commitAll('P');
+    failA(s);
+    stopNow(s.r);
+    expect(stateOf(s.r)['failedTests']).toBeDefined();
+    s.r.git('checkout', '--', '.'); // the tree is P again
+    expect(stopNow(s.r)['decision']).toBeUndefined();
+    expect(stateOf(s.r)['failedTests']).toBeUndefined();
+    s.r.write('src/app.js', 'v3\n');
+    const res = stopNow(s.r);
+    // the broken test ran narrow (existing mode); the new product change must run in full, not rerun the stale ids
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_a.py', 'FULL']);
+    expect(res['systemMessage']).toBeUndefined();
+  });
+
+  it('the existing narrow mode still runs only the changed test files', () => {
+    const s = rerunSetup();
+    s.r.write('src/app.js', 'v2\n');
+    stopNow(s.r);
+    s.r.write('tests/test_b.py', `${TEST_OK}# edited\n`);
+    const res = stopNow(s.r);
+    expect(s.runs()).toEqual(['FULL', 'IDS tests/test_b.py']);
+    expect(String(res['systemMessage'])).toContain('ran only the changed test files (tests/test_b.py)');
   });
 });
