@@ -54,7 +54,7 @@
         <a class="btn btn-secondary" href="manual.html">Read the manual</a>
         <a class="btn btn-secondary" href="https://github.com/scottconverse/verdictlite">View on GitHub</a>
       </div>
-      <p class="hero-meta">Early stage: built on 2026-11-19 and being set up on its first real repo now. Not on npm. Not made by or affiliated with Anthropic.</p>
+      <p class="hero-meta">Early stage: built on 2026-11-21 and being set up on its first real repo now. Not on npm. Not made by or affiliated with Anthropic.</p>
     </div>
     <figure class="term" aria-labelledby="hero-term-cap">
       <div class="term-bar"><span>Claude Code Stop hook</span><span class="label">vlite stop-check</span></div>
@@ -71,8 +71,7 @@ not ok 1 - adds price times quantity
     <span class="err">9 !== 14</span>
 <span class="cut">  ... (test output trimmed)</span>
 
-Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
-  2026-11-19T04-51-44-727Z-round1.txt
+Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-round1.txt
 
 <span class="warn">Round 1 of 3. Fix the cause. Do not skip, sleep or rerun to pass.</span></pre>
       <figcaption id="hero-term-cap" class="term-caption" style="padding:0 1rem 0.9rem;margin:0;color:var(--term-dim)">Real output from a demo repo. The agent changed <code style="background:none;border:0;color:inherit">*</code> to <code style="background:none;border:0;color:inherit">+</code> in a price function. The stop was blocked and the agent was told why.</figcaption>
@@ -115,7 +114,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>A commit gives no sign of how it was checked.</h3>
-        <p><span class="k">What VerdictLite does</span>Git hooks add a <code>Verified-By:</code> line to every commit message: <code>verify</code>, <code>code-review</code>, <code>stop-check</code>, <code>docs</code>, <code>skipped</code> or <code>none</code>.</p>
+        <p><span class="k">What VerdictLite does</span>Git hooks add a <code>Verified-By:</code> line to every commit message when the gate is on (<code>observe</code> or <code>enforce</code>): <code>verify</code>, <code>code-review</code>, <code>stop-check</code>, <code>docs</code>, <code>skipped</code> or <code>none</code>.</p>
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>A change loosens the rules that judge it.</h3>
@@ -255,7 +254,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
       </div>
       <div class="cap">
         <h3>Three-round hand-off</h3>
-        <p>Failed stops are counted per session. Rounds 1 and 2 block. Round 3 ends the session and points a person to a file with up to 2,000 lines of output.</p>
+        <p>Failed stops are counted per session and branch. Rounds 1 and 2 block. Round 3 ends the session and points a person to a file with up to 2,000 lines of output.</p>
       </div>
       <div class="cap">
         <h3>Required orgs</h3>
@@ -286,7 +285,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/
     <div class="section-head">
       <p class="eyebrow">Real output</p>
       <h2 id="out-title">What the agent and you will see.</h2>
-      <p>Every block below is real output from <code>vlite</code> 0.1.12, run in a small demo repo. Home folder paths are shortened to <code>~/.verdictlite/...</code> and the repo path to <code>.../shop</code>. Long test output is trimmed where marked.</p>
+      <p>Every block below is real output from <code>vlite</code> 0.1.15, run in a small demo repo. Home folder paths are shortened to <code>~/.verdictlite/...</code> and the repo path to <code>.../shop</code>. Long test output is trimmed where marked.</p>
     </div>
     <div class="proof">
       <figure>
@@ -397,7 +396,7 @@ A stamp only counts for the exact staged tree. Stage everything first (git add -
     <div class="section-head">
       <p class="eyebrow">Quick start</p>
       <h2 id="install-title">Install in one click, then set up one repo.</h2>
-      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js 20 with winget if you have none, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite</code>. The installer also connects VerdictLite to the Claude Code and Codex desktop apps. To update, run it again. To uninstall, delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
+      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js LTS with winget if Node 20 or newer is missing, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. The installer also connects VerdictLite to the Claude Code and Codex desktop apps. To update, run it again. To uninstall, run <code>vlite install --uninstall</code> in each guarded repo, then delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
     </div>
     <ol class="steps">
       <li>
