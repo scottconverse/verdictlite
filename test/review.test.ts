@@ -196,6 +196,9 @@ describe('review prompt and Claude Code limits (finding 006)', () => {
     expect(reviewerArgs('codex', ['-m', 'e', 'exec'])).toEqual(['-m', 'e', 'exec', ...CODEX_READONLY_ARGS]);
     expect(reviewerArgs('codex', ['-m', 'e', 'login'])).toEqual(['-m', 'e', 'login']);
     expect(reviewerArgs('codex', ['-m', 'exec'])).toEqual(['-m', 'exec']);
+    // newer Codex flags that take a value must not be taken for the subcommand
+    expect(reviewerArgs('codex', ['--remote', 'x', 'exec'])).toEqual(['--remote', 'x', 'exec', ...CODEX_READONLY_ARGS]);
+    expect(reviewerArgs('codex', ['--thread-source', 'x', 'e'])).toEqual(['--thread-source', 'x', 'e', ...CODEX_READONLY_ARGS]);
     expect(reviewerArgs('codex', ['login'])).toEqual(['login']);
     expect(reviewerArgs('codex', [])).toEqual([]);
     expect(reviewerArgs('codexx', ['exec'])).toEqual(['exec']);

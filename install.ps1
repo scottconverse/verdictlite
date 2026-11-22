@@ -13,9 +13,9 @@
 #   4. Writes %LOCALAPPDATA%\VerdictLite\bin\vlite.cmd and adds that bin folder to your user PATH.
 #   5. Runs vlite --help to prove it works.
 #   6. Runs vlite connect on a TRUE first install only. It adds the VerdictLite Stop hook to the Claude Code and
-#      Codex desktop apps (user level). It is not a first install, and connect is not run, when distcli.js is
+#      Codex desktop apps (user level). It is not a first install, and connect is not run, when dist\cli.js is
 #      already in the install folder, or the VerdictLite home folder exists (VLITE_HOME, else
-#      %USERPROFILE%.verdictlite), or vlite connect --uninstall left its connect-off.json marker there.
+#      %USERPROFILE%\.verdictlite), or vlite connect --uninstall left its connect-off.json marker there.
 #      Use -NoConnect to skip it always, or -Connect to force it.
 #
 # Nothing needs administrator rights. Runs on Windows PowerShell 5.1 and PowerShell 7.

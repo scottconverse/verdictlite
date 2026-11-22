@@ -146,7 +146,7 @@ export const CODEX_LOCKOUT_ARGS = [
 export const CODEX_READONLY_ARGS = ['--sandbox', 'read-only', ...CODEX_LOCKOUT_ARGS];
 
 /** Codex flags that take a value in the next argument (when written without "="). */
-const CODEX_VALUE_FLAGS = new Set(['-m', '--model', '-c', '--config', '-p', '--profile', '-C', '--cd', '-s', '--sandbox', '-a', '--ask-for-approval', '-i', '--image', '--add-dir', '--enable', '--disable', '--color', '-o', '--output-last-message', '--output-schema', '--local-provider']);
+const CODEX_VALUE_FLAGS = new Set(['-m', '--model', '-c', '--config', '-p', '--profile', '-C', '--cd', '-s', '--sandbox', '-a', '--ask-for-approval', '-i', '--image', '--add-dir', '--enable', '--disable', '--color', '-o', '--output-last-message', '--output-schema', '--local-provider', '--remote', '--remote-auth-token-env', '--thread-source', '--cyber-access-program']);
 
 /** The Codex subcommand: the first argument that is not a flag and not a flag's value. */
 function codexSubcommand(args: string[]): string | undefined {
