@@ -1,6 +1,6 @@
 # VerdictLite user manual
 
-Version 0.1.15. This manual is also on the web at
+Version 0.1.16. This manual is also on the web at
 <https://scottconverse.github.io/verdictlite/manual.html>.
 
 VerdictLite (`vlite`) is a small command-line tool. It makes an AI coding agent
@@ -120,9 +120,9 @@ says so. A hook command that is not VerdictLite's own is never changed.
 
 **Codex limit:** In Codex, VerdictLite checks the repo the session opened in, plus
 any repo that blocked on that session's last stop. It cannot use the Codex log to
-find other repos the session changed. If the opened repo has `vlite stop-check` in
-`.claude/settings.json`, VerdictLite treats that repo as already covered, so a
-Codex session there does not check it.
+find other repos the session changed. If you connected Codex with an earlier
+version, run `vlite connect --codex` again and approve the changed hook in Codex
+Settings > Hooks.
 
 **To update:** run the installer again. It replaces the files in the same
 folder, so the paths in your git hooks stay valid.
@@ -339,9 +339,7 @@ transcript; the time is not measured yet.
 Limit: `--global` does not see a file changed only by a shell command (for
 example `sed -i`), unless the session started inside that repo. In Codex,
 VerdictLite checks the repo the session opened in, plus any repo that blocked on
-its last stop. It cannot use the Codex log to find other repos. A repo with
-`vlite stop-check` in `.claude/settings.json` counts as covered and is not
-checked.
+its last stop. It cannot use the Codex log to find other repos.
 
 ### Step 6. Add a `verify` skill (recommended)
 
@@ -399,9 +397,7 @@ Limits:
 - A repo with no `origin` remote, or an `origin` on another host, is not
   checked.
 - In Codex, VerdictLite checks the repo the session opened in, plus any repo that
-  blocked on its last stop. It cannot use the Codex log to find other repos. A
-  repo with `vlite stop-check` in `.claude/settings.json` counts as covered and
-  is not checked.
+  blocked on its last stop. It cannot use the Codex log to find other repos.
 
 ## 4. What happens in a normal agent session
 
@@ -845,7 +841,7 @@ skipped: ...` and lets the commit through.
 Merge `vlite.json` to the base branch and run `git fetch`. VerdictLite looks for
 `vlite.json` on `origin/main` first, then `main`. If the file there names
 another `base` that has its own `vlite.json`, that copy is used. If your
-default branch has another name, such as `master`, VerdictLite 0.1.15 will not
+default branch has another name, such as `master`, VerdictLite 0.1.16 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
@@ -859,7 +855,7 @@ If both the hook and a `.vlite-prev` file already exist, install stops with
 `... is not ours and ... already exists. Move one of them by hand.` Merge or
 move one of them, then run install again. If a hook manager sets
 `core.hooksPath`, install writes to that folder. If the manager rewrites the
-folder later, run `vlite install` again. VerdictLite 0.1.15 has not been tested
+folder later, run `vlite install` again. VerdictLite 0.1.16 has not been tested
 with specific hook managers.
 
 **The hooks stopped working after I moved VerdictLite or changed Node.**
@@ -1102,7 +1098,7 @@ folder.
 |---|---|
 | `vlite install [--claude] [--uninstall]` | Writes or removes the git hooks. `--claude` prints the Stop hook settings. |
 | `vlite connect [--claude] [--codex] [--uninstall]` | Adds the Stop hook to the Claude Code and Codex desktop apps (user level). With no flag it does both. `--uninstall` removes only the hooks that `vlite connect` wrote. It makes a backup of each file before it changes it. |
-| `vlite stop-check [--session ID] [--global]` | The Stop hook for Claude Code and Codex. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With `--session` it does not read stdin, for runs by hand. With `--global` it checks the repos the session edited (user-level hook). |
+| `vlite stop-check [--session ID] [--global] [--codex]` | The Stop hook for Claude Code and Codex. Reads the hook's JSON on stdin. Always exits 0 and speaks through JSON on stdout. With `--session` it does not read stdin, for runs by hand. With `--global` it checks the repos the session edited (user-level hook). `--codex` is set by `vlite connect --codex`. The hook runs in Codex, so a Claude project hook does not cover the repo. |
 | `vlite stamp <verify\|code-review> --result <pass\|fail> [--evidence PATH ...] [--note TEXT]` | Writes a stamp for the current working tree. `--evidence` can be given more than once. |
 | `vlite gate pre-commit` | Called by the `pre-commit` hook. Records the method. Never blocks. |
 | `vlite gate commit-msg FILE` | Called by the `commit-msg` hook. Blocks in `enforce` mode and adds the trailer. |
@@ -1142,8 +1138,7 @@ Other agents do not get the Stop hook automatically; they get the commit gate,
 and `vlite stamp` / `vlite review` are CLI commands any agent can run. You can
 still run `vlite stop-check --session NAME` by hand. In Codex, VerdictLite checks
 the repo the session opened in, plus any repo that blocked on its last stop. It
-cannot use the Codex log to find other repos. A repo with `vlite stop-check` in
-`.claude/settings.json` counts as covered and is not checked.
+cannot use the Codex log to find other repos.
 
 **Does it send my code anywhere?**
 Only `vlite review` does, and only to the review command you set (by default
@@ -1157,7 +1152,7 @@ No. It is an independent project that follows a method Anthropic's Claude Code
 team described in public.
 
 **What state is the project in?**
-Early. Version 0.1.15 is the fifteenth fix to the first release (0.1.0), built on 2026-11-21. It has 268
+Early. Version 0.1.16 is the sixteenth fix to the first release (0.1.0), built on 2026-11-22. It has 270
 automated tests (6 run on Windows only); the rest run on Ubuntu and Windows in CI. It is being set up on its first
 real repo now. Expect changes. Report problems at
 <https://github.com/scottconverse/verdictlite/issues>.

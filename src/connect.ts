@@ -18,9 +18,9 @@ type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Bare `node` works in bash, cmd and PowerShell. The cli path is absolute. */
-function hookCommand(): string {
+function hookCommand(codex: boolean): string {
   const cli = join(dirname(fileURLToPath(import.meta.url)), 'cli.js').replace(/\\/g, '/');
-  return `node "${cli}" stop-check --global`;
+  return `node "${cli}" stop-check --global${codex ? ' --codex' : ''}`;
 }
 
 const isGlobalStop = (c: unknown): boolean => typeof c === 'string' && c.includes('stop-check') && c.includes('--global');
@@ -168,12 +168,13 @@ function updateMarker(apps: ('claude' | 'codex')[], uninstall: boolean): void {
 
 export function connect(opts: ConnectOpts): string[] {
   const uninstall = opts.uninstall ?? false;
-  const command = hookCommand();
+  const claudeCommand = hookCommand(false);
+  const codexCommand = hookCommand(true);
   const notes: string[] = [];
   if (opts.apps.includes('claude')) {
     const home = opts.claudeHome ?? join(homedir(), '.claude');
     if (!existsSync(home)) notes.push('Claude Code not found');
-    else notes.push(...connectOne('Claude Code', join(home, 'settings.json'), uninstall, command));
+    else notes.push(...connectOne('Claude Code', join(home, 'settings.json'), uninstall, claudeCommand));
   }
   if (opts.apps.includes('codex')) {
     const home = opts.codexHome ?? (process.env.CODEX_HOME || join(homedir(), '.codex'));
@@ -186,13 +187,13 @@ export function connect(opts: ConnectOpts): string[] {
       const tomlHooks = /^\s*\[\[?hooks(?:\]|\.(?!state[.\]])[^\]]*\])/m.test(tomlText);
       if (uninstall) {
         // Always remove our entry from hooks.json, also when config.toml has hooks.
-        notes.push(...connectOne('Codex', join(home, 'hooks.json'), true, command));
+        notes.push(...connectOne('Codex', join(home, 'hooks.json'), true, codexCommand));
         if (tomlHooks && tomlText.includes('stop-check')) notes.push(`Codex: ${toml} may hold the VerdictLite hook too. Remove it from there by hand.`);
       } else if (tomlHooks) {
         notes.push(`Codex: ${toml} already has hooks. Codex warns when two places define hooks, so I did not write hooks.json.`);
-        notes.push(`Add the VerdictLite Stop hook to ${toml} by hand. The command is:\n${command}`);
+        notes.push(`Add the VerdictLite Stop hook to ${toml} by hand. The command is:\n${codexCommand}`);
       } else {
-        notes.push(...connectOne('Codex', join(home, 'hooks.json'), false, command));
+        notes.push(...connectOne('Codex', join(home, 'hooks.json'), false, codexCommand));
         notes.push('Codex runs a new hook only after you approve it: in Codex, click Review hooks in the message box, or open Settings > Hooks.');
       }
     }

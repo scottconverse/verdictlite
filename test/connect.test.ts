@@ -22,9 +22,11 @@ describe('connect', () => {
       expect(hook.type).toBe('command');
       expect(hook.timeout).toBe(HOOK_TIMEOUT_SEC);
       expect(HOOK_TIMEOUT_SEC).toBe(3600);
-      expect(hook.command).toMatch(/^node ".*cli\.js" stop-check --global$/);
       expect(hook.command).not.toContain('\\');
     }
+    // Codex says which app it runs in; Claude does not.
+    expect(read(join(h.codexHome, 'hooks.json')).hooks.Stop[0].hooks[0].command).toMatch(/^node ".*cli\.js" stop-check --global --codex$/);
+    expect(read(join(h.claudeHome, 'settings.json')).hooks.Stop[0].hooks[0].command).toMatch(/^node ".*cli\.js" stop-check --global$/);
     expect(notes.join('\n')).toContain('Review hooks');
     expect(backups(h.claudeHome)).toHaveLength(0);
   });
@@ -110,7 +112,8 @@ describe('connect', () => {
     const keep = { hooks: [{ type: 'command', command: 'echo keep' }] };
     const owner = { hooks: [{ type: 'command', command: 'vlite stop-check --global' }] };
     const ours = { hooks: [{ type: 'command', command: 'node "C:/x/VerdictLite/app/dist/cli.js" stop-check --global', timeout: 2400 }] };
-    writeFileSync(file, JSON.stringify({ hooks: { Stop: [keep, owner, ours] } }));
+    const oursCodex = { hooks: [{ type: 'command', command: 'node "C:/x/VerdictLite/app/dist/cli.js" stop-check --global --codex', timeout: HOOK_TIMEOUT_SEC }] };
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [keep, owner, ours, oursCodex] } }));
     connect({ ...h, apps: ['codex'], uninstall: true });
     expect(read(file).hooks.Stop).toEqual([keep, owner]);
     expect(backups(h.codexHome)).toHaveLength(1);
@@ -165,6 +168,20 @@ describe('connect repair (finding 007)', () => {
     expect(connect({ ...h, apps: ['claude'] }).join('\n')).toContain('already connected');
     expect(readFileSync(file, 'utf8')).toBe(text);
     expect(backups(h.claudeHome)).toHaveLength(0);
+  });
+
+  it('updates an old VerdictLite Codex entry to the --codex command', () => {
+    const h = homes();
+    const file = join(h.codexHome, 'hooks.json');
+    const other = { hooks: [{ type: 'command', command: 'echo keep' }] };
+    const old = { hooks: [{ type: 'command', command: 'node "C:/old/dist/cli.js" stop-check --global', timeout: HOOK_TIMEOUT_SEC }] };
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [other, old] } }));
+    const notes = connect({ ...h, apps: ['codex'] }).join('\n');
+    expect(notes).toContain('updated the VerdictLite hook');
+    const doc = read(file);
+    expect(doc.hooks.Stop[0]).toEqual(other);
+    expect(doc.hooks.Stop[1].hooks[0].command).toMatch(/^node ".*cli\.js" stop-check --global --codex$/);
+    expect(backups(h.codexHome)).toHaveLength(1);
   });
 });
 
