@@ -127,11 +127,11 @@ export async function review(ctx: Ctx, opts: { base?: string; roundNote?: string
 export const CLAUDE_BLOCKED_TOOLS = 'Edit,Write,NotebookEdit,Bash';
 
 /**
- * Added to  for a reviewer. The sandbox alone is not enough: on Windows, a real test wrote a file under
+ * Added to the args of `codex exec` for a reviewer. The sandbox alone is not enough: on Windows, a real test wrote a file under
  * --sandbox read-only. So the tools that can write (shell, code host, sub-agents, apps, plugins, MCP, apply_patch) are off too.
+ * These lockout flags are always added; the sandbox flag is added only when the user set none.
  */
-export const CODEX_READONLY_ARGS = [
-  '--sandbox', 'read-only',
+export const CODEX_LOCKOUT_ARGS = [
   '--disable', 'shell_tool',
   '--disable', 'unified_exec',
   '--disable', 'code_mode_host',
@@ -141,6 +141,25 @@ export const CODEX_READONLY_ARGS = [
   '-c', 'mcp_servers={}',
   '-c', 'include_apply_patch_tool=false',
 ];
+
+/** The lockout flags plus a read-only sandbox. */
+export const CODEX_READONLY_ARGS = ['--sandbox', 'read-only', ...CODEX_LOCKOUT_ARGS];
+
+/** Codex flags that take a value in the next argument (when written without "="). */
+const CODEX_VALUE_FLAGS = new Set(['-m', '--model', '-c', '--config', '-p', '--profile', '-C', '--cd', '-s', '--sandbox', '-a', '--ask-for-approval', '-i', '--image', '--add-dir', '--enable', '--disable', '--color', '-o', '--output-last-message', '--output-schema', '--local-provider']);
+
+/** The Codex subcommand: the first argument that is not a flag and not a flag's value. */
+function codexSubcommand(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] as string;
+    if (a.startsWith('-')) {
+      if (CODEX_VALUE_FLAGS.has(a)) i++;
+      continue;
+    }
+    return a;
+  }
+  return undefined;
+}
 
 /** The program name of the first word of the command: lower case, no path, no .exe/.cmd/.bat/.ps1. Handles quotes. */
 function commandName(command: string): string {
@@ -161,14 +180,15 @@ export function isCodexCommand(command: string): boolean {
 
 /**
  * The reviewer's arguments. For Claude Code, the app is told to block write tools (--disallowedTools), so read-only does
- * not depend on the prompt. For `codex exec`, the app adds CODEX_READONLY_ARGS. A user who already passes either choice
- * keeps their own value. Other tools get their args unchanged.
+ * not depend on the prompt. For `codex exec` (or its alias `e`), the app always adds the tool lockout flags, and
+ * adds `--sandbox read-only` only when the user set no sandbox flag. A user who already passes a Claude tool list keeps it. Other tools get their args unchanged.
  */
 export function reviewerArgs(command: string, args: string[]): string[] {
   if (isCodexCommand(command)) {
-    if (!args.includes('exec')) return args;
-    if (args.some((a) => /^(--sandbox(=|$)|-s$|--full-auto$|--dangerously-bypass-approvals-and-sandbox$)/.test(a))) return args;
-    return [...args, ...CODEX_READONLY_ARGS];
+    const sub = codexSubcommand(args);
+    if (sub !== 'exec' && sub !== 'e') return args;
+    const sandboxSet = args.some((a) => /^(--sandbox(=|$)|-s($|=)|--full-auto$|--dangerously-bypass-approvals-and-sandbox$)/.test(a));
+    return [...args, ...(sandboxSet ? CODEX_LOCKOUT_ARGS : CODEX_READONLY_ARGS)];
   }
   if (!isClaudeCommand(command)) return args;
   if (args.some((a) => /^--(disallowedTools|disallowed-tools)(=|$)/.test(a))) return args;

@@ -382,6 +382,51 @@ describe('stop-check requires (finding 004)', () => {
   });
 });
 
+describe('stop-check skipped parts are not a pass (FINDING-001)', () => {
+  const parts = [{ name: 'app', paths: ['src/**'], requires: ['needed.txt'], checks: [{ name: 'check', run: 'node check.mjs', timeoutSec: 60 }] }];
+  const sj = (r: Repo): Record<string, any> => JSON.parse(readFileSync(join(stateFolder(r), 'state.json'), 'utf8')) as Record<string, any>;
+
+  it('repeats the warning at each stop, and judges the skipped files once the part can run', () => {
+    const r = makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n' }, baseConfig({ parts }));
+    r.write('src/app.js', 'BAD\n');
+    const first = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['systemMessage']);
+    expect(first).toContain('did NOT run');
+    expect(sj(r)['lastPassTree']).toBeUndefined();
+    expect(sj(r)['skippedPass']).toBeDefined();
+    // stop 2, same files: the same warning again, not a silent pass
+    const second = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['systemMessage']);
+    expect(second).toBe(first);
+    expect(stopLog(r)).toHaveLength(1); // answered from state, checks were not rerun
+    // stop 3: the required path now exists and the bad code is still there
+    r.write('needed.txt', 'x\n');
+    const third = lastJson(r.vlite(['stop-check', '--session', 's']).out);
+    expect(third['decision']).toBe('block');
+    expect(existsSync(join(stateFolder(r), 'stamps.jsonl'))).toBe(false);
+  });
+
+  it('a real full pass clears the skipped record', () => {
+    const r = makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n' }, baseConfig({ parts }));
+    r.write('src/app.js', 'ok\n');
+    r.vlite(['stop-check', '--session', 's']);
+    r.write('needed.txt', 'x\n');
+    expect(r.vlite(['stop-check', '--session', 's']).out).toBe('');
+    expect(sj(r)['skippedPass']).toEqual({});
+    expect(sj(r)['lastPassTree']).toBeDefined();
+  });
+
+  it('too many modules repeats the warning and never records a pass', () => {
+    const r = makeRepo(
+      { 'check.mjs': CHECK_SCRIPT, 'pkg/alpha/x.py': 'a\n', 'pkg/beta/y.py': 'b\n', 'pkg/gamma/z.py': 'c\n' },
+      baseConfig({ maxExpandedParts: 2, parts: [{ name: 'mod:{name}', paths: ['pkg/{name}/**'], checks: [{ name: 'tests', run: 'node check.mjs', timeoutSec: 60 }] }] }),
+    );
+    for (const m of ['alpha', 'beta', 'gamma']) r.write(`pkg/${m}/new.py`, 'x\n');
+    const first = String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['systemMessage']);
+    expect(first).toContain('3 modules changed');
+    expect(String(lastJson(r.vlite(['stop-check', '--session', 's']).out)['systemMessage'])).toBe(first);
+    expect(sj(r)['lastPassTree']).toBeUndefined();
+  });
+});
+
 describe('stop-check rounds (finding 008)', () => {
   const flag = (n: string): string => `node -e "process.exit(require('fs').existsSync('${n}')?1:0)"`;
   const parts = [

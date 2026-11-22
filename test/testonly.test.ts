@@ -225,12 +225,13 @@ describe('narrow mode only for real test files (finding 002)', () => {
     expect(parseConfig(JSON.stringify({ version: 1 }), 'x').tests.files).toContain('**/test_*.py');
   });
 
-  it('a narrow pass writes a stop-check stamp that says it was narrow; a full pass does not', () => {
+  it('a narrow pass writes no stamp and says the commit gate needs a full check; a full pass writes one', () => {
     const s = setup();
     firstPass(s);
     expect(stamps(s.r).at(-1)).toMatchObject({ method: 'stop-check', result: 'pass', note: 'stop-check pass' });
     s.r.write('tests/test_a.py', T('a', '    assert 2 == 2\n'));
-    stop(s.r);
-    expect(stamps(s.r).at(-1)).toMatchObject({ method: 'stop-check', result: 'pass', note: 'stop-check pass (narrow: only changed test files ran)' });
+    const out = stop(s.r);
+    expect(out.out).toContain('vlite stamp verify');
+    expect(stamps(s.r)).toHaveLength(1);
   });
 });

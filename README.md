@@ -96,18 +96,27 @@ The installer needs no admin rights. It does these things:
 4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
    to your user PATH.
 5. Runs `vlite --help` and prints the installed version.
-6. Runs `vlite connect` on a first install. This adds the VerdictLite Stop hook
-   to the Claude Code and Codex desktop apps, at user level. On an update
-   (VerdictLite is already installed) it keeps your current connect state and
-   does not run `vlite connect`. It prints one line that says which it did.
-   Use `-NoConnect` to never connect, or `-Connect` to connect on an update too.
+6. Runs `vlite connect` on a true first install only. This adds the VerdictLite
+   Stop hook to the Claude Code and Codex desktop apps, at user level. It is
+   not a first install when `dist\cli.js` is already in the install folder,
+   when the VerdictLite home folder exists (`VLITE_HOME`, else
+   `%USERPROFILE%\.verdictlite`), or when `vlite connect --uninstall` left its
+   `connect-off.json` marker there. In those cases the installer keeps your
+   current connect state, does not run `vlite connect`, and prints one line that
+   says why. Use `-NoConnect` to never connect, or `-Connect` to connect anyway.
 
-Open a new terminal after it finishes. Then restart the Claude and Codex apps.
-Codex runs a new hook only after you approve it. In Codex, click **Review
-hooks** in the message box, or open **Settings > Hooks**.
+Open a new terminal after it finishes. If it connected the apps, restart the
+Claude and Codex apps. Codex runs a new hook only after you approve it. In
+Codex, click **Review hooks** in the message box, or open **Settings > Hooks**.
+The installer prints the approve step only when it connected the apps.
 
 To connect or disconnect the apps later, run `vlite connect` or
 `vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
+`--uninstall` always removes VerdictLite's entry from Codex `hooks.json`, also when
+`config.toml` has a `[hooks]` table. If `config.toml` mentions `stop-check`, it
+tells you to remove that hook by hand. `--uninstall` also writes
+`connect-off.json` in the VerdictLite home, so the installer does not connect
+again on its own. A plain `vlite connect` removes that marker.
 If VerdictLite's own hook entry has an old path or timeout (for example after
 you moved the install folder), `vlite connect` updates it, makes a backup and
 says so. A hook command that is not VerdictLite's own is never changed.
@@ -285,6 +294,8 @@ session edited this turn. It sends one combined message.
    If a `requires` path is missing, the part is skipped, and every skipped part
    shows a warning line. If the base branch has that path and the change
    deleted it, the part fails with the check name `part/requires`, and it blocks.
+   A skipped part is not recorded as a pass. The warning repeats at each stop on
+   the same files, and the skipped files are judged again once the part can run.
 6. All pass: it records the pass. Something fails: it blocks the stop and tells
    the agent the command, the exit code and the last 60 lines of output.
 7. Rounds are counted for each session and branch, not for each set of failing
@@ -305,8 +316,8 @@ the warning is added.
 test files changed since, a check with `runFiles` runs just the changed test
 files. Every changed file under `tests.paths` must match `tests.files`. A
 helper, fixture or `conftest.py` there forces the full check. A narrow pass
-still writes a `stop-check` stamp, but its note says `stop-check pass (narrow:
-only changed test files ran)`.
+writes no `stop-check` stamp, so it is not commit proof. The message says the
+commit gate needs a full check or `vlite stamp verify`.
 
 If VerdictLite itself breaks, it logs the error and lets the agent stop. A
 failing check always blocks.
@@ -315,8 +326,8 @@ failing check always blocks.
 vlite stop-check --session my-test   # run it by hand, without Claude Code
 ```
 
-A stop-check pass lets the agent stop. When at least one check ran and no part
-was skipped, it also writes a `stop-check` stamp for that exact tree, so a commit
+A stop-check pass lets the agent stop. When at least one check ran in full (no
+part was skipped and it was not a narrow run), it also writes a `stop-check` stamp for that exact tree, so a commit
 of the same files shows `Verified-By: stop-check`. A pass where no check ran
 (docs only, or files no part covers) writes no stamp.
 
@@ -408,11 +419,11 @@ Runs one AI review round on the diff from the merge-base to the working tree.
 - When the command is Claude Code (`claude`), VerdictLite adds
   `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
   tools. If your `review.args` already has `--disallowedTools`, your value is
-  kept. When the command is Codex (`codex`) and the args have `exec`,
-  VerdictLite adds `--sandbox read-only` and turns off the Codex tools that can
-  write (shell, sub-agents, apps, plugins, MCP and apply_patch). If your `review.args` already sets a
-  sandbox (`--sandbox`, `-s`, `--full-auto` or
-  `--dangerously-bypass-approvals-and-sandbox`), your choice is kept. For any
+  kept. When the command is Codex (`codex`) and its subcommand is `exec` (or its alias `e`; the first
+argument that is not a flag or a flag's value), VerdictLite always turns off the Codex tools that can
+write (shell, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
+`review.args` sets no sandbox (`--sandbox`, `-s`, `--full-auto` or `--dangerously-bypass-approvals-and-sandbox`).
+If you set a sandbox, your choice is kept and the tool lockout is added anyway. For any
   other command, only the prompt says "read-only". VerdictLite cannot block
   tools there.
 - The reviewer runs with `VLITE_REVIEWER=1`. The stop check does nothing in that session. A review never runs your repo's checks and is never blocked by them.

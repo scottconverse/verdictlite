@@ -221,6 +221,22 @@ describe('stop-check proof', () => {
     expect(trailer(r)).toBe('stop-check');
   });
 
+  it('a narrow pass is not commit proof (FINDING-003)', () => {
+    const parts = [{ name: 'app', paths: ['src/**', 'tests/**'], checks: [{ name: 'check', run: 'node check.mjs', runFiles: 'node check.mjs {files}', timeoutSec: 60 }] }];
+    const r = makeRepo({ 'check.mjs': CHECK_SCRIPT, 'src/app.js': 'fine\n', 'tests/test_a.py': 'def test_a():\n    assert True\n' }, baseConfig({ gate: { mode: 'enforce' }, parts }));
+    expect(r.vlite(['install']).code).toBe(0);
+    r.write('src/app.js', 'v2\n');
+    expect(r.vlite(['stop-check'], { input: stopHook(r) }).code).toBe(0); // full pass
+    r.write('tests/test_a.py', 'def test_a():\n    assert True\n    assert 1 == 1\n');
+    const narrow = r.vlite(['stop-check'], { input: stopHook(r) });
+    expect(narrow.out).toContain('vlite stamp verify');
+    const [name] = readdirSync(r.home);
+    const stamps = readFileSync(join(r.home, name ?? '', 'stamps.jsonl'), 'utf8').trim().split('\n');
+    expect(stamps).toHaveLength(1); // only the full pass wrote a stamp
+    const c = commit(r, 'tests changed after a narrow pass');
+    expect(c.ok).toBe(false);
+  });
+
   it('joins with verify in the documented order', () => {
     const r = setup('observe');
     r.write('src/app.js', 'both\n');

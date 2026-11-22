@@ -16,6 +16,8 @@ export interface State {
   lastPassHead?: Record<string, string>;
   /** Per branch key, per concrete part name: the tree at which all of that part's checks last passed. Missing in older state. */
   partPassTree?: Record<string, Record<string, string>>;
+  /** Per branch key: a run that skipped a part. Its tree repeats the warning at each stop; it never moves lastPassTree. */
+  skippedPass?: Record<string, { tree: string; message: string }>;
   rounds: Record<string, number>;
   pending: Record<string, Pending>;
   blocks: string[];

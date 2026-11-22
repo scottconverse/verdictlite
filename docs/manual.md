@@ -86,18 +86,27 @@ The installer needs no admin rights. It does these things:
 4. Writes `%LOCALAPPDATA%\VerdictLite\bin\vlite.cmd` and adds that `bin` folder
    to your user PATH.
 5. Runs `vlite --help` and prints the installed version.
-6. Runs `vlite connect` on a first install. This adds the VerdictLite Stop hook
-   to the Claude Code and Codex desktop apps, at user level. On an update
-   (VerdictLite is already installed) it keeps your current connect state and
-   does not run `vlite connect`. It prints one line that says which it did.
-   Use `-NoConnect` to never connect, or `-Connect` to connect on an update too.
+6. Runs `vlite connect` on a true first install only. This adds the VerdictLite
+   Stop hook to the Claude Code and Codex desktop apps, at user level. It is
+   not a first install when `dist\cli.js` is already in the install folder,
+   when the VerdictLite home folder exists (`VLITE_HOME`, else
+   `%USERPROFILE%\.verdictlite`), or when `vlite connect --uninstall` left its
+   `connect-off.json` marker there. In those cases the installer keeps your
+   current connect state, does not run `vlite connect`, and prints one line that
+   says why. Use `-NoConnect` to never connect, or `-Connect` to connect anyway.
 
-Open a new terminal after it finishes. Then restart the Claude and Codex apps.
-Codex runs a new hook only after you approve it. In Codex, click **Review
-hooks** in the message box, or open **Settings > Hooks**.
+Open a new terminal after it finishes. If it connected the apps, restart the
+Claude and Codex apps. Codex runs a new hook only after you approve it. In
+Codex, click **Review hooks** in the message box, or open **Settings > Hooks**.
+The installer prints the approve step only when it connected the apps.
 
 To connect or disconnect the apps later, run `vlite connect` or
 `vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
+`--uninstall` always removes VerdictLite's entry from Codex `hooks.json`, also when
+`config.toml` has a `[hooks]` table. If `config.toml` mentions `stop-check`, it
+tells you to remove that hook by hand. `--uninstall` also writes
+`connect-off.json` in the VerdictLite home, so the installer does not connect
+again on its own. A plain `vlite connect` removes that marker.
 If VerdictLite's own hook entry has an old path or timeout (for example after
 you moved the install folder), `vlite connect` updates it, makes a backup and
 says so. A hook command that is not VerdictLite's own is never changed.
@@ -389,7 +398,8 @@ Here is one session from start to end.
    A template part runs once for each module that changed. A part whose
    `requires` files are missing is skipped, and a warning line says so. If the
    base branch has that file and the change deleted it, the part fails as
-   `part/requires` and blocks. A check that times out is no result: it is not
+   `part/requires` and blocks. A skipped part is not a pass: its warning repeats at
+   each stop until the part can run. A check that times out is no result: it is not
    a failure, it counts no round, and it is not recorded as a pass. See
    [Part templates](#part-templates).
 8. **All pass:** VerdictLite records the tree as passed and the agent stops.
@@ -399,10 +409,17 @@ Here is one session from start to end.
    The gate adds a `Verified-By:` line to the commit message. See
    [section 7](#7-stamps-and-the-verified-by-trailer).
 
-A stop-check pass lets the agent stop. When at least one check ran and no part
-was skipped, it also writes a `stop-check` stamp for that exact tree, so a commit
-of the same files shows `Verified-By: stop-check`. A pass where no check ran
-(docs only, or files no part covers) writes no stamp. Only `vlite stamp` and a clean `vlite review` write stamps.
+A stop-check pass lets the agent stop. When at least one check ran in full (no
+part was skipped and it was not a narrow run), it also writes a `stop-check`
+stamp for that exact tree, so a commit of the same files shows
+`Verified-By: stop-check`. A pass where no check ran (docs only, or files no part
+covers) writes no stamp.
+
+A run with a skipped part (a missing `requires` path, or too many modules) is not
+a pass. VerdictLite does not move its saved pass, so the skipped files are
+judged again as soon as the part can run. It never blocks and never writes a
+stamp for that run, and it repeats the same warning at each stop on the same
+files, without running the checks again. Only `vlite stamp` and a clean `vlite review` write stamps.
 
 ## 5. Read a block message
 
@@ -625,11 +642,11 @@ What it does:
    When the command is Claude Code (`claude`), VerdictLite adds
    `--disallowedTools Edit,Write,NotebookEdit,Bash`, so the app blocks write
    tools. If your `review.args` already has `--disallowedTools`, your value is
-   kept. When the command is Codex (`codex`) and the args have `exec`,
-   VerdictLite adds `--sandbox read-only` and turns off the Codex tools that can
-  write (shell, sub-agents, apps, plugins, MCP and apply_patch). If your `review.args` already sets a
-   sandbox (`--sandbox`, `-s`, `--full-auto` or
-   `--dangerously-bypass-approvals-and-sandbox`), your choice is kept. For any
+   kept. When the command is Codex (`codex`) and its subcommand is `exec` (or its alias `e`; the first
+argument that is not a flag or a flag's value), VerdictLite always turns off the Codex tools that can
+write (shell, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
+`review.args` sets no sandbox (`--sandbox`, `-s`, `--full-auto` or `--dangerously-bypass-approvals-and-sandbox`).
+If you set a sandbox, your choice is kept and the tool lockout is added anyway. For any
    other command, only the prompt says "read-only". VerdictLite cannot block
    tools there.
 5. Expects strict JSON back: a list of findings, each with a severity, file,
@@ -984,8 +1001,8 @@ A check can opt in to a narrow form with `runFiles`:
   match `tests.files`. The default is `**/test_*.py`, `**/*_test.py`,
   `**/*.test.*`, `**/*.spec.*` and `**/*_test.go`. A helper, fixture or
   `conftest.py` under `tests.paths` forces the full check.
-- A narrow pass still writes a `stop-check` stamp, and the note says
-  `stop-check pass (narrow: only changed test files ran)`.
+- A narrow pass writes no `stop-check` stamp, so it is not commit proof. The
+  message says the commit gate needs a full check or `vlite stamp verify`.
 - `{files}` becomes the changed test files that still exist, each quoted, as
   paths from the check's folder. A deleted test file is listed as "deleted, not
   run". If every changed test file was deleted, the check runs in full.
