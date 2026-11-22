@@ -85,6 +85,18 @@ describe('stop-check --global (user-level hook)', () => {
     expect(lastJson(out.out)['decision']).toBe('block');
   });
 
+  it('checks the opened repo in Codex even when a Claude project hook exists', () => {
+    const r = setup();
+    r.write('.claude/settings.json', '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"vlite stop-check"}]}]}}');
+    r.commitAll('project hook');
+    r.write('src/app.js', 'BAD\n');
+    const out = r.vlite(['stop-check', '--global', '--codex'], { input: hook(transcript([join(r.dir, 'src', 'app.js')]), r.dir) });
+    expect(out.code).toBe(0);
+    const j = lastJson(out.out);
+    expect(j['decision']).toBe('block');
+    expect(String(j['reason'])).toContain('assertion failed: app is BAD');
+  });
+
   it('re-checks a blocked repo on the next stop even after a new prompt line', () => {
     const r = setup();
     r.write('src/app.js', 'BAD\n');

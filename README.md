@@ -129,9 +129,9 @@ says so. A hook command that is not VerdictLite's own is never changed.
 
 **Codex limit:** In Codex, VerdictLite checks the repo the session opened in, plus
 any repo that blocked on that session's last stop. It cannot use the Codex log to
-find other repos the session changed. If the opened repo has `vlite stop-check` in
-`.claude/settings.json`, VerdictLite treats that repo as already covered, so a
-Codex session there does not check it.
+find other repos the session changed. If you connected Codex with an earlier
+version, run `vlite connect --codex` again and approve the changed hook in Codex
+Settings > Hooks.
 
 **To update:** run the installer again. It replaces the files in the same
 folder, so the paths in your git hooks stay valid.
@@ -264,8 +264,6 @@ does nothing, except the required-org check described below. Limit: a file
 changed only by a shell command is not seen, unless the session started in that
 repo. In Codex, VerdictLite checks the repo the session opened in, plus any repo
 that blocked on its last stop. It cannot use the Codex log to find other repos.
-A repo with `vlite stop-check` in `.claude/settings.json` counts as covered and
-is not checked.
 
 **6. Add a verify skill** (recommended). A
 [Claude Code skill](https://code.claude.com/docs/en/skills) at
@@ -297,11 +295,13 @@ vlite install --claude      # install and print the Stop hook settings
 vlite install --uninstall   # remove the hooks and restore old ones
 ```
 
-### `vlite stop-check [--session ID] [--global]`
+### `vlite stop-check [--session ID] [--global] [--codex]`
 
 The Stop hook for Claude Code and Codex. It runs when the agent tries to stop.
 With `--global` (for the user-level hook) it does the steps below for each repo
-the session edited this turn. It sends one combined message.
+the session edited this turn. It sends one combined message. `--codex` is set by
+`vlite connect --codex`. The hook runs in Codex, so a Claude project hook does not
+cover the repo.
 
 1. It works out the tree id (git's hash of the whole set of files) of the
    working tree. If this tree already passed on this branch, it lets the agent
@@ -534,9 +534,7 @@ Limits:
 - A repo with no `origin` remote, or an `origin` on another host, is not
   checked.
 - In Codex, VerdictLite checks the repo the session opened in, plus any repo that
-  blocked on its last stop. It cannot use the Codex log to find other repos. A
-  repo with `vlite stop-check` in `.claude/settings.json` counts as covered and
-  is not checked.
+  blocked on its last stop. It cannot use the Codex log to find other repos.
 
 ## Config reference: `vlite.json`
 
@@ -649,8 +647,7 @@ Delete the folder to reset VerdictLite for a repo.
   commit gate, and `vlite stamp` / `vlite review` are CLI commands any agent can
   run. The tamper check runs inside the stop check. In Codex, VerdictLite checks
   the repo the session opened in, plus any repo that blocked on its last stop.
-  It cannot use the Codex log to find other repos. A repo with `vlite stop-check`
-  in `.claude/settings.json` counts as covered and is not checked.
+  It cannot use the Codex log to find other repos.
 - **The tamper check is simple.** It uses regular expressions. It can miss
   things and can flag lines that are fine. A renamed test counts as removed.
 - **If the tool itself breaks, it lets the agent stop.** It logs an error.

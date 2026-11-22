@@ -403,7 +403,7 @@ A stamp only counts for the exact staged tree. Stage everything first (git add -
         <div>
           <h3>Install the tool</h3>
 <pre class="code" tabindex="0"><code><span class="p">PS&gt; </span>irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex</code></pre>
-          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks the repo the Codex session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</p>
+          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks the repo the Codex session opened in, plus any repo that blocked on its last stop.</p>
           <p>Open a new terminal and run <code>vlite --help</code> to check.</p>
           <p><strong>From source (any OS).</strong> Keep the clone outside the repos it checks.</p>
 <pre class="code" tabindex="0"><code>git clone https://github.com/scottconverse/verdictlite.git
@@ -483,7 +483,7 @@ npm link</code></pre>
     <ul>
       <li><strong>It does not prove your code is right.</strong> It shows that your checks ran on this exact set of files. The checks are only as good as the ones you write.</li>
       <li><strong>A stamp is a speed bump, not proof.</strong> Anyone can write one by hand, and <code>git commit --no-verify</code> skips git hooks. VerdictLite makes these choices visible in logs and trailers. It does not make them impossible.</li>
-      <li><strong>The stop check needs Claude Code or Codex.</strong> It runs as a Stop hook in either app. Other agents do not get the Stop hook automatically; they get the commit gate, and <code>vlite stamp</code> / <code>vlite review</code> are CLI commands any agent can run. The tamper check runs inside the stop check. In Codex, VerdictLite checks the repo the session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</li>
+      <li><strong>The stop check needs Claude Code or Codex.</strong> It runs as a Stop hook in either app. Other agents do not get the Stop hook automatically; they get the commit gate, and <code>vlite stamp</code> / <code>vlite review</code> are CLI commands any agent can run. The tamper check runs inside the stop check. In Codex, VerdictLite checks the repo the session opened in, plus any repo that blocked on its last stop.</li>
       <li><strong>The tamper check is simple.</strong> It uses regular expressions. It can miss things and can flag lines that are fine.</li>
       <li><strong>If the tool itself breaks, it lets the agent stop.</strong> A failing check always blocks. A crash in VerdictLite does not; it logs an error instead.</li>
       <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.15.</li>

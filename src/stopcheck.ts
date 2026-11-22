@@ -82,11 +82,12 @@ function readHookInput(): HookInput {
 }
 
 /**
- * The Claude Code Stop hook. Always exits 0: it speaks through JSON on stdout, and fails open on its own errors.
+ * The Claude Code and Codex Stop hook. Always exits 0: it speaks through JSON on stdout, and fails open on its own errors.
  * Default: checks the repo of the session folder. With global (a user-level hook), it checks every repo with a
  * vlite.json that the session edited this turn, plus the session folder's repo when that repo has no project hook.
+ * With codex, a Claude project hook does not cover the session folder's repo, so it is always checked.
  */
-export async function stopCheck(opts: { repo?: string; session?: string; global?: boolean }): Promise<number> {
+export async function stopCheck(opts: { repo?: string; session?: string; global?: boolean; codex?: boolean }): Promise<number> {
   // A review session (started by `vlite review`) must never run checks or be blocked.
   if (process.env['VLITE_REVIEWER'] === '1') return 0;
   const input = opts.session ? {} : readHookInput();
@@ -99,7 +100,8 @@ export async function stopCheck(opts: { repo?: string; session?: string; global?
     return 0;
   }
   const own = safeRoot(dir);
-  const covered = own !== null && hasProjectHook(own);
+  // A Claude project hook runs only in Claude Code. A Codex session must check the opened repo itself.
+  const covered = own !== null && opts.codex !== true && hasProjectHook(own);
   const roots = new Set<string>(readSessionRoots(session));
   if (own && !covered) roots.add(own);
   if (input.transcript_path) {

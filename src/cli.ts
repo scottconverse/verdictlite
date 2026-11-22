@@ -15,14 +15,15 @@ const HELP = `vlite - VerdictLite: verification gates for AI coding agents
 
   vlite install [--repo DIR] [--claude] [--uninstall]
   vlite connect [--claude] [--codex] [--uninstall]  (add the Stop hook to the Claude Code and Codex apps; no flag = both)
-  vlite stop-check [--session ID] [--global] (Claude Code Stop hook; reads hook JSON on stdin)
+  vlite stop-check [--session ID] [--global] [--codex] (Stop hook for Claude Code and Codex; reads hook JSON on stdin)
                                              --global: user-level hook; checks the repos the session edited
+                                             --codex: the hook runs in Codex; a Claude project hook does not cover the repo
   vlite stamp <verify|code-review> --result <pass|fail> [--evidence PATH ...] [--note TEXT]
   vlite gate <pre-commit | commit-msg FILE | report [--days N]>
   vlite require-org [NAME | --remove NAME | --list]  (every repo of this GitHub org must have a vlite.json; no args = list)
   vlite review [--base REF] [--round-note TEXT]
 
-Every command takes --repo DIR (default: the current folder).
+install, stop-check, stamp, gate and review take --repo DIR (default: the current folder).
 `;
 
 const VALUE_FLAGS = new Set(['repo', 'session', 'result', 'evidence', 'note', 'days', 'base', 'round-note', 'remove']);
@@ -66,7 +67,12 @@ async function main(argv: string[]): Promise<number> {
   if (cmd === 'stop-check') {
     const session = one(args, 'session');
     const repo = one(args, 'repo');
-    return stopCheck({ ...(session ? { session } : {}), ...(repo ? { repo } : {}), global: args.flags.has('global') });
+    return stopCheck({
+      ...(session ? { session } : {}),
+      ...(repo ? { repo } : {}),
+      global: args.flags.has('global'),
+      codex: args.flags.has('codex'),
+    });
   }
   if (cmd === 'connect') {
     const c = args.flags.has('claude');
