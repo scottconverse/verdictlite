@@ -138,7 +138,7 @@ folder, so the paths in your git hooks stay valid.
 
 **To uninstall:** run `vlite connect --uninstall` to remove the user-level Claude
 Code and Codex hooks. Then, in each guarded repo, run `vlite install --uninstall`
-to remove its hooks. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
+to remove its hooks. Remove the `vlite stop-check` entry from each guarded repo's `.claude/settings.json` or `.claude/settings.local.json`, if you added one. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
 remove `%LOCALAPPDATA%\VerdictLite\bin` from your user PATH (Windows Settings,
 search for "environment variables", then "Edit environment variables for your
 account").
@@ -351,7 +351,7 @@ then gives the agent one command that runs only those tests. At the next stop,
 that check runs only the saved tests. If they pass, the agent sees a warning:
 the full check did not run, so it is not proof, and no stamp is written. CI or
 `vlite stamp verify` gives the full proof. The saved ids are cleared, so the
-next stop starts the check again: in full, or in narrow mode if only test files
+next stop on a changed tree starts the check again: in full, or in narrow mode if only test files
 changed since the part last passed. If the output has no failed test names, or a
 test file is gone, the saved ids are dropped and the check then runs narrow or
 full as usual. A command with `-x` stops at the first
@@ -629,7 +629,7 @@ worktrees of one repo share the folder.
 |---|---|
 | `state.json` | Last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
 | `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
-| `stop.jsonl` | One line per stop check. |
+| `stop.jsonl` | One line per repo checked. A global stop can write several. A stop that repeats a saved result writes none. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
 | `handoffs/` | The saved output of each failing stop-check round: the last 2,000 lines for each failing check, plus up to 200 changed file names. |

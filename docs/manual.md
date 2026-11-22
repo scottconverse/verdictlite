@@ -129,7 +129,7 @@ folder, so the paths in your git hooks stay valid.
 
 **To uninstall:** run `vlite connect --uninstall` to remove the user-level Claude
 Code and Codex hooks. Then, in each guarded repo, run `vlite install --uninstall`
-to remove its hooks. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
+to remove its hooks. Remove the `vlite stop-check` entry from each guarded repo's `.claude/settings.json` or `.claude/settings.local.json`, if you added one. Then delete the folder `%LOCALAPPDATA%\VerdictLite`. Last,
 remove `%LOCALAPPDATA%\VerdictLite\bin` from your user PATH (Windows Settings,
 search for "environment variables", then "Edit environment variables for your
 account").
@@ -159,7 +159,7 @@ The git hooks do not need `vlite` on PATH. They call the exact `node` and
 ## 3. Set up a repo
 
 Do these steps in the repo you want to guard. Steps 1 to 3 are files you commit.
-Steps 4 and 5 are local to your machine.
+Step 4 is local to your machine. Step 5 is local unless you commit `.claude/settings.json`.
 
 ### Step 1. Write `vlite.json`
 
@@ -528,7 +528,7 @@ it passed (or failed)". There are three kinds:
 
 - `verify`: written by you or your verify skill with `vlite stamp verify`.
 - `code-review`: written by `vlite review` when it finds nothing important.
-- `stop-check`: written by the Stop hook (`vlite stop-check`) when it passes. You cannot write it by hand; `vlite stamp` accepts only `verify` and `code-review`.
+- `stop-check`: written by the Stop hook (`vlite stop-check`) when it passes. `vlite stamp` cannot write it; it accepts only `verify` and `code-review`.
 
 Write a stamp:
 
@@ -820,7 +820,7 @@ repo share it.
 |---|---|
 | `state.json` | The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
 | `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
-| `stop.jsonl` | One line per stop check: pass, block, handoff, no-result, missing-config or error. |
+| `stop.jsonl` | One line per repo checked. A global stop can write several. A stop that repeats a saved result writes none. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
 | `handoffs/` | The saved output of each failing stop-check round: the last 2,000 lines for each failing check, plus up to 200 changed file names. |
@@ -894,7 +894,9 @@ vlite install --uninstall
 `vlite connect --uninstall` removes the user-level Claude Code and Codex hooks.
 `vlite install --uninstall` removes VerdictLite's git hooks and puts back any
 `.vlite-prev` hooks. Then delete `vlite.json` if you like, and delete the repo's
-folder under `~/.verdictlite/`. On a Windows install, delete
+folder under `~/.verdictlite/`. Remove the `vlite stop-check` entry from each
+guarded repo's `.claude/settings.json` or `.claude/settings.local.json`, if you
+added one. On a Windows install, delete
 `%LOCALAPPDATA%\VerdictLite` and remove its `bin` folder from your user PATH. To
 remove the command from a source install, run `npm unlink -g verdictlite` and
 delete the clone.
@@ -1068,7 +1070,7 @@ commit proof.
   kept). It strips colours first.
 - It saves nothing when the format is unknown, when no test is named, when more
   than 50 tests failed, or when an id starts with `-`, has a line break, or
-  names a file that does not exist. The next stop then runs in full.
+  names a file that does not exist. The next stop then runs narrow or full as usual.
 - The block message adds one line: fix these tests, then check the fix by
   running only this command (the `runFiles` command with the ids). Do not run
   the full test suite; CI runs it.
@@ -1084,7 +1086,7 @@ commit proof.
   check did not run, and says CI or `vlite stamp verify` gives the full proof.
   This is not a pass: no stamp is written, the start point does not move, and
   the part is not marked as passed. The same tree repeats the warning and runs
-  nothing. The saved tests are cleared, so the next stop starts the check again:
+  nothing. The saved tests are cleared, so the next stop on a changed tree starts the check again:
   in full, or in narrow mode if only test files changed since the part last
   passed.
 - A real full pass clears the saved tests of the branch.
