@@ -110,7 +110,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>The agent tries the same broken fix forever.</h3>
-        <p><span class="k">What VerdictLite does</span>Rounds are counted. After three failed rounds the session ends and a person is asked to look, with a hand-off file of the full output.</p>
+        <p><span class="k">What VerdictLite does</span>Rounds are counted. After three failed rounds VerdictLite hands off to a person, with a saved file of the last output of each failing check. Claude Code stops the agent; Codex marks the hook run as stopped.</p>
       </div>
       <div class="ledger-row">
         <h3><span class="k">What goes wrong</span>A commit gives no sign of how it was checked.</h3>
@@ -245,7 +245,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">What it does</p>
-      <h2 id="caps-title">Five commands. One config file.</h2>
+      <h2 id="caps-title">The commands. One config file.</h2>
     </div>
     <div class="caps">
       <div class="cap">
@@ -254,7 +254,7 @@ Full output: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-44-727Z-ro
       </div>
       <div class="cap">
         <h3>Three-round hand-off</h3>
-        <p>Failed stops are counted per session and branch. Rounds 1 and 2 block. Round 3 ends the session and points a person to a file with up to 2,000 lines of output.</p>
+        <p>Failed stops are counted per session and branch. Rounds 1 and 2 block. Round 3 hands off to a person. Claude Code stops the agent; Codex marks the hook run as stopped. The hand-off file holds the last 2,000 lines of each failing check.</p>
       </div>
       <div class="cap">
         <h3>Required orgs</h3>
@@ -304,10 +304,10 @@ tests/price.test.js:7 (old line) [removed-test] test('rounds to cents', () =&gt;
       </figure>
       <figure>
         <div class="term">
-          <div class="term-bar"><span>Round 3: the session ends</span></div>
+          <div class="term-bar"><span>Round 3: hand-off to a person</span></div>
           <pre tabindex="0" class="wrap-lines"><span class="err">VerdictLite: app/tests still fails after 3 rounds. A person must look.</span> Last failure: exit code 1. Handoff: ~/.verdictlite/shop-1fc1e50e6f/handoffs/2026-11-19T04-51-47-492Z-round3.txt</pre>
         </div>
-        <figcaption class="term-caption">The hook prints <code>{"continue": false}</code>, which ends the session. You read the hand-off file and decide what to do.</figcaption>
+        <figcaption class="term-caption">The hook prints <code>{"continue": false}</code>. Claude Code stops the agent; Codex marks the hook run as stopped. You read the hand-off file and decide what to do.</figcaption>
       </figure>
       <figure>
         <div class="term">
@@ -396,14 +396,14 @@ A stamp only counts for the exact staged tree. Stage everything first (git add -
     <div class="section-head">
       <p class="eyebrow">Quick start</p>
       <h2 id="install-title">Install in one click, then set up one repo.</h2>
-      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js LTS with winget if Node 20 or newer is missing, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. The installer also connects VerdictLite to the Claude Code and Codex desktop apps. To update, run it again. To uninstall, run <code>vlite install --uninstall</code> in each guarded repo, then delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
+      <p>On Windows, download <code>install-verdictlite.cmd</code> from the <a href="https://github.com/scottconverse/verdictlite/releases/latest">latest release</a> and double-click it. Or run the one line below in PowerShell. It needs no admin rights. It installs Node.js LTS with winget if Node 20 or newer is missing, checks the download&rsquo;s SHA-256, and puts the files in <code>%LOCALAPPDATA%\VerdictLite\app</code>. On a first install, the installer also connects VerdictLite to the Claude Code and Codex apps; use <code>-Connect</code> to connect on an update. To update, run it again. To uninstall, run <code>vlite connect --uninstall</code>, then <code>vlite install --uninstall</code> in each guarded repo, then delete that folder and remove its <code>bin</code> folder from your user PATH. On other systems, or to build it yourself, use the source steps further down: you need git, <a href="https://nodejs.org/">Node.js 20 or newer</a> and <a href="https://pnpm.io/installation">pnpm</a>. VerdictLite is not on npm.</p>
     </div>
     <ol class="steps">
       <li>
         <div>
           <h3>Install the tool</h3>
 <pre class="code" tabindex="0"><code><span class="p">PS&gt; </span>irm https://github.com/scottconverse/verdictlite/releases/latest/download/install.ps1 | iex</code></pre>
-          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks only the repo that the Codex session opened in. It cannot read the Codex log to find other repos that the session changed.</p>
+          <p>Then restart the Claude and Codex apps. Codex runs a new hook only after you approve it: in Codex, click <strong>Review hooks</strong>, or open <strong>Settings &gt; Hooks</strong>. To connect or disconnect later, run <code>vlite connect</code> or <code>vlite connect --uninstall</code>. Codex limit: VerdictLite checks the repo the Codex session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</p>
           <p>Open a new terminal and run <code>vlite --help</code> to check.</p>
           <p><strong>From source (any OS).</strong> Keep the clone outside the repos it checks.</p>
 <pre class="code" tabindex="0"><code>git clone https://github.com/scottconverse/verdictlite.git
@@ -450,12 +450,12 @@ npm link</code></pre>
     ]
   }
 }</code></pre>
-          <p>The timeout is in seconds. Make it longer than all your checks put together. Then add a verify skill so the agent stamps its work. The <a href="manual.html#3-set-up-a-repo">manual</a> has a full example.</p>
+          <p>The timeout is in seconds. Make it longer than all your checks put together. Codex users: run <code>vlite connect --codex</code>, which writes <code>$CODEX_HOME/hooks.json</code>, and then approve the hook in Codex. Then add a verify skill so the agent stamps its work. The <a href="manual.html#3-set-up-a-repo">manual</a> has a full example.</p>
         </div>
       </li>
     </ol>
 
-    <h3 style="margin-top:var(--space-7)">The five commands</h3>
+    <h3 style="margin-top:var(--space-7)">Main commands</h3>
     <table class="cmds">
       <tbody>
         <tr><th scope="row"><code>vlite install</code></th><td>Adds or removes (<code>--uninstall</code>) the git hooks. <code>--claude</code> prints the Stop hook settings.</td></tr>
@@ -465,6 +465,7 @@ npm link</code></pre>
         <tr><th scope="row"><code>vlite review</code></th><td>One AI review round against <code>REVIEW.md</code> from the base branch.</td></tr>
       </tbody>
     </table>
+    <p>The <code>connect</code> and <code>require-org</code> commands are described in the <a href="manual.html#16-command-reference">manual</a>.</p>
   </div>
 </section>
 
@@ -482,7 +483,7 @@ npm link</code></pre>
     <ul>
       <li><strong>It does not prove your code is right.</strong> It shows that your checks ran on this exact set of files. The checks are only as good as the ones you write.</li>
       <li><strong>A stamp is a speed bump, not proof.</strong> Anyone can write one by hand, and <code>git commit --no-verify</code> skips git hooks. VerdictLite makes these choices visible in logs and trailers. It does not make them impossible.</li>
-      <li><strong>The stop check needs Claude Code or Codex.</strong> It runs as a Stop hook in either app. Other agents get the commit gate only. The tamper check runs inside the stop check. Codex checks only the repo the session opened in.</li>
+      <li><strong>The stop check needs Claude Code or Codex.</strong> It runs as a Stop hook in either app. Other agents do not get the Stop hook automatically; they get the commit gate, and <code>vlite stamp</code> / <code>vlite review</code> are CLI commands any agent can run. The tamper check runs inside the stop check. In Codex, VerdictLite checks the repo the session opened in, plus any repo that blocked on its last stop. It does not check a repo that has <code>vlite stop-check</code> in <code>.claude/settings.json</code>.</li>
       <li><strong>The tamper check is simple.</strong> It uses regular expressions. It can miss things and can flag lines that are fine.</li>
       <li><strong>If the tool itself breaks, it lets the agent stop.</strong> A failing check always blocks. A crash in VerdictLite does not; it logs an error instead.</li>
       <li><strong>The config must be on <code>origin/main</code> or <code>main</code>.</strong> A default branch with another name, such as <code>master</code>, is not searched in 0.1.15.</li>
