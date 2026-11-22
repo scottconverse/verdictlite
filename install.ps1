@@ -12,9 +12,11 @@
 #      because git hooks keep its path.
 #   4. Writes %LOCALAPPDATA%\VerdictLite\bin\vlite.cmd and adds that bin folder to your user PATH.
 #   5. Runs vlite --help to prove it works.
-#   6. Runs vlite connect on a FIRST install. It adds the VerdictLite Stop hook to the Claude Code and Codex
-#      desktop apps (user level). On an update (VerdictLite is already installed) it keeps your current connect
-#      state and does not run vlite connect. Use -NoConnect to skip it always, or -Connect to force it.
+#   6. Runs vlite connect on a TRUE first install only. It adds the VerdictLite Stop hook to the Claude Code and
+#      Codex desktop apps (user level). It is not a first install, and connect is not run, when dist\cli.js is
+#      already in the install folder, or the VerdictLite home folder exists (VLITE_HOME, else
+#      %USERPROFILE%\.verdictlite), or vlite connect --uninstall left its connect-off.json marker there.
+#      Use -NoConnect to skip it always, or -Connect to force it.
 #
 # Nothing needs administrator rights. Runs on Windows PowerShell 5.1 and PowerShell 7.
 # Run it again at any time to update.
@@ -31,7 +33,7 @@ param(
     [switch]$NoPath,
     # Do not connect VerdictLite to the Claude Code and Codex desktop apps.
     [switch]$NoConnect,
-    # Run vlite connect even on an update. Without it, an update keeps the current connect state.
+    # Run vlite connect even when this is not a first install. Without it, the current connect state is kept.
     [switch]$Connect,
     # Print the steps and change nothing.
     [switch]$PlanOnly
@@ -77,7 +79,7 @@ $steps = @(
     'Put the files in the install folder',
     'Write vlite.cmd and add its folder to the user PATH',
     'Run vlite --help to check it works',
-    'Connect VerdictLite to the Claude and Codex desktop apps (first install only; -Connect forces it on an update)'
+    'Connect VerdictLite to the Claude and Codex desktop apps (true first install only; -Connect forces it)'
 )
 if ($PlanOnly) {
     $i = 1
@@ -90,8 +92,14 @@ else { $Base = 'https://github.com/scottconverse/verdictlite/releases/latest/dow
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $BinDir = Join-Path (Split-Path -Parent $InstallDir) 'bin'
 if ($NoConnect -and $Connect) { throw '-NoConnect and -Connect cannot be used together.' }
-# An update: VerdictLite is already installed. Decided here, before step 3 writes the new files.
-$isUpdate = Test-Path (Join-Path $InstallDir 'dist/cli.js')
+# Is this a true first install? Decided here, before anything is written. It is NOT a first install when
+# VerdictLite is already in the install folder, its home folder exists, or a disconnect marker is there.
+$vliteHome = if ($env:VLITE_HOME) { $env:VLITE_HOME } else { Join-Path $env:USERPROFILE '.verdictlite' }
+$notFirst = ''
+if (Test-Path (Join-Path $InstallDir 'dist/cli.js')) { $notFirst = 'update' }
+elseif (Test-Path (Join-Path $vliteHome 'connect-off.json')) { $notFirst = 'marker' }
+elseif (Test-Path $vliteHome) { $notFirst = 'home' }
+$connectRan = $false
 
 # 1. Node.js
 Step $steps[0]
@@ -200,10 +208,12 @@ Ok "VerdictLite $installed is installed"
 Step $steps[5]
 if ($NoConnect) {
     Note "-NoConnect: the Claude and Codex apps were not changed"
-} elseif ($isUpdate -and -not $Connect) {
-    Note "This is an update, so I kept your current connect state and did not run vlite connect. Use -Connect to connect."
+} elseif ($notFirst -and -not $Connect) {
+    if ($notFirst -eq 'update') { Note "This is an update, so I kept your current connect state and did not run vlite connect. Use -Connect to connect." }
+    elseif ($notFirst -eq 'marker') { Note "You disconnected VerdictLite on purpose ($(Join-Path $vliteHome 'connect-off.json')), so I did not run vlite connect. Use -Connect to connect again." }
+    else { Note "The VerdictLite home folder $vliteHome already exists, so this is not a first install. I kept your current connect state and did not run vlite connect. Use -Connect to connect." }
 } else {
-    if ($isUpdate) { Note "-Connect: running vlite connect on an update" } else { Note "First install: running vlite connect" }
+    if ($notFirst) { Note "-Connect: running vlite connect (this is not a first install)" } else { Note "First install: running vlite connect" }
     # Read ALL the output first, for the same reason as above.
     $connectOut = @(& $cmdFile connect 2>&1)
     $connectCode = $LASTEXITCODE
@@ -212,12 +222,16 @@ if ($NoConnect) {
         if ($text -match 'connected|already|removed') { Ok $text } else { Note $text }
     }
     if ($connectCode -ne 0) { throw "vlite connect failed with exit code $connectCode" }
+    $connectRan = $true
 }
 
 Write-Host ""
 Write-Host "Next steps" -ForegroundColor Cyan
-Note "1. Restart the Claude and Codex apps."
-Note "2. In Codex, approve the hook: click Review hooks, or open Settings > Hooks."
-Note "3. In each repo you want to guard, ask the agent to write vlite.json, then run:  vlite install"
+$n = 1
+if ($connectRan) {
+    Note "$n. Restart the Claude and Codex apps."; $n++
+    Note "$n. In Codex, approve the hook: click Review hooks, or open Settings > Hooks."; $n++
+}
+Note "$n. In each repo you want to guard, ask the agent to write vlite.json, then run:  vlite install"
 Note "   How to write vlite.json: https://github.com/scottconverse/verdictlite/blob/main/docs/manual.md#3-set-up-a-repo"
 Note "To update later, run this installer again."

@@ -1,8 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { connect, HOOK_TIMEOUT_SEC } from '../src/connect.js';
 import { tempDir } from './root.js';
+
+// connect() writes a marker in the VerdictLite home: keep it in a temp folder, never the real one.
+process.env['VLITE_HOME'] = tempDir('cn-vlite-home-');
 
 const backups = (dir: string): string[] => readdirSync(dir).filter((f) => f.includes('.vlite-backup-'));
 const read = (f: string): any => JSON.parse(readFileSync(f, 'utf8'));
@@ -162,5 +165,43 @@ describe('connect repair (finding 007)', () => {
     expect(connect({ ...h, apps: ['claude'] }).join('\n')).toContain('already connected');
     expect(readFileSync(file, 'utf8')).toBe(text);
     expect(backups(h.claudeHome)).toHaveLength(0);
+  });
+});
+
+describe('connect uninstall (FINDING-005, FINDING-002 marker)', () => {
+  const ours = { hooks: [{ type: 'command', command: 'node "C:/x/VerdictLite/app/dist/cli.js" stop-check --global', timeout: 3600 }] };
+
+  it('uninstall removes our hooks.json entry even when config.toml has [hooks]', () => {
+    const h = homes();
+    const file = join(h.codexHome, 'hooks.json');
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [ours] } }));
+    writeFileSync(join(h.codexHome, 'config.toml'), 'model = "x"\n[hooks]\n');
+    const notes = connect({ ...h, apps: ['codex'], uninstall: true }).join('\n');
+    expect(notes).toContain('removed the VerdictLite hook');
+    expect(read(file)).toEqual({});
+    expect(notes).not.toContain('by hand');
+    // config.toml that may hold our hook: say so
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [ours] } }));
+    writeFileSync(join(h.codexHome, 'config.toml'), '[[hooks.Stop]]\ncommand = "node cli.js stop-check --global"\n');
+    expect(connect({ ...h, apps: ['codex'], uninstall: true }).join('\n')).toContain('Remove it from there by hand');
+  });
+
+  it('connect with [hooks] in config.toml still does not write hooks.json', () => {
+    const h = homes();
+    writeFileSync(join(h.codexHome, 'config.toml'), '[hooks]\n');
+    connect({ ...h, apps: ['codex'] });
+    expect(existsSync(join(h.codexHome, 'hooks.json'))).toBe(false);
+  });
+
+  it('uninstall writes connect-off.json in the VerdictLite home, and a plain connect removes it', () => {
+    const h = homes();
+    const marker = join(process.env['VLITE_HOME'] as string, 'connect-off.json');
+    rmSync(marker, { force: true });
+    connect({ ...h, apps: ['claude'], uninstall: true });
+    expect(read(marker).apps).toEqual(['claude']);
+    connect({ ...h, apps: ['codex'], uninstall: true });
+    expect(read(marker).apps).toEqual(['claude', 'codex']);
+    connect({ ...h, apps: ['claude', 'codex'] });
+    expect(existsSync(marker)).toBe(false);
   });
 });

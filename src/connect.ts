@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { vliteHome } from './state.js';
 
 export interface ConnectOpts {
   claudeHome?: string;
@@ -142,6 +143,29 @@ function connectOne(label: string, file: string, uninstall: boolean, command: st
   return notes;
 }
 
+/** Marker: the person disconnected on purpose. The installer reads it and does not connect again by itself. */
+export function markerFile(): string {
+  return join(vliteHome(), 'connect-off.json');
+}
+
+/** `connect --uninstall` records what it was asked to disconnect; a plain `connect` removes the marker. */
+function updateMarker(apps: ('claude' | 'codex')[], uninstall: boolean): void {
+  const file = markerFile();
+  if (!uninstall) {
+    rmSync(file, { force: true });
+    return;
+  }
+  let was: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (isObj(parsed) && Array.isArray(parsed.apps)) was = parsed.apps.filter((a): a is string => typeof a === 'string');
+  } catch {
+    // no marker yet, or an unreadable one: start again
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeAtomic(file, { apps: [...new Set([...was, ...apps])], time: new Date().toISOString() });
+}
+
 export function connect(opts: ConnectOpts): string[] {
   const uninstall = opts.uninstall ?? false;
   const command = hookCommand();
@@ -156,16 +180,27 @@ export function connect(opts: ConnectOpts): string[] {
     if (!existsSync(home)) notes.push('Codex not found');
     else {
       const toml = join(home, 'config.toml');
+      const tomlText = existsSync(toml) ? readFileSync(toml, 'utf8') : '';
       // A hook table such as [hooks] or [[hooks.Stop]] counts. Codex itself writes
       // [hooks.state.'...'] tables to record hook trust; those are not hooks.
-      if (existsSync(toml) && /^\s*\[\[?hooks(?:\]|\.(?!state[.\]])[^\]]*\])/m.test(readFileSync(toml, 'utf8'))) {
+      const tomlHooks = /^\s*\[\[?hooks(?:\]|\.(?!state[.\]])[^\]]*\])/m.test(tomlText);
+      if (uninstall) {
+        // Always remove our entry from hooks.json, also when config.toml has hooks.
+        notes.push(...connectOne('Codex', join(home, 'hooks.json'), true, command));
+        if (tomlHooks && tomlText.includes('stop-check')) notes.push(`Codex: ${toml} may hold the VerdictLite hook too. Remove it from there by hand.`);
+      } else if (tomlHooks) {
         notes.push(`Codex: ${toml} already has hooks. Codex warns when two places define hooks, so I did not write hooks.json.`);
-        if (!uninstall) notes.push(`Add the VerdictLite Stop hook to ${toml} by hand. The command is:\n${command}`);
+        notes.push(`Add the VerdictLite Stop hook to ${toml} by hand. The command is:\n${command}`);
       } else {
-        notes.push(...connectOne('Codex', join(home, 'hooks.json'), uninstall, command));
-        if (!uninstall) notes.push('Codex runs a new hook only after you approve it: in Codex, click Review hooks in the message box, or open Settings > Hooks.');
+        notes.push(...connectOne('Codex', join(home, 'hooks.json'), false, command));
+        notes.push('Codex runs a new hook only after you approve it: in Codex, click Review hooks in the message box, or open Settings > Hooks.');
       }
     }
+  }
+  try {
+    updateMarker(opts.apps, uninstall);
+  } catch (e) {
+    notes.push(`Could not update ${markerFile()} (${(e as Error).message}). The installer may connect again on an update.`);
   }
   return notes;
 }

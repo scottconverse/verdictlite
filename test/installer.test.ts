@@ -78,7 +78,7 @@ describe('install.ps1 connect on update (finding 003)', () => {
     const profile = tempDir('installer-profile-');
     mkdirSync(join(profile, '.claude'));
     mkdirSync(join(profile, '.codex'));
-    const env = { ...process.env, USERPROFILE: profile, HOME: profile, CODEX_HOME: join(profile, '.codex') };
+    const env = { ...process.env, USERPROFILE: profile, HOME: profile, CODEX_HOME: join(profile, '.codex'), VLITE_HOME: '' };
     const settings = join(profile, '.claude', 'settings.json');
     const hookCount = (): number => (existsSync(settings) ? (JSON.parse(readFileSync(settings, 'utf8')) as { hooks?: { Stop?: unknown[] } }).hooks?.Stop?.length ?? 0 : 0);
     const base = tempDir('installer-connect-');
@@ -92,6 +92,7 @@ describe('install.ps1 connect on update (finding 003)', () => {
     const first = go();
     expect(first.code, first.out).toBe(0);
     expect(first.out).toContain('First install: running vlite connect');
+    expect(first.out).toContain('approve the hook');
     expect(hookCount()).toBe(1);
 
     // The person removes the hook. An update must not put it back.
@@ -100,18 +101,64 @@ describe('install.ps1 connect on update (finding 003)', () => {
     expect(update.code, update.out).toBe(0);
     expect(update.out).toContain('This is an update');
     expect(update.out).toContain('did not run vlite connect');
+    expect(update.out).not.toContain('approve the hook');
     expect(existsSync(settings)).toBe(false);
 
     // -Connect forces it on an update.
     const forced = go('-Connect');
     expect(forced.code, forced.out).toBe(0);
-    expect(forced.out).toContain('-Connect: running vlite connect on an update');
+    expect(forced.out).toContain('-Connect: running vlite connect (this is not a first install)');
     expect(hookCount()).toBe(1);
 
     // -NoConnect still skips it, and the two switches together are refused.
     rmSync(settings);
-    expect(go('-NoConnect').out).toContain('-NoConnect');
+    const noConnect = go('-NoConnect').out;
+    expect(noConnect).toContain('-NoConnect');
+    expect(noConnect).not.toContain('approve the hook');
     expect(existsSync(settings)).toBe(false);
     expect(go('-NoConnect', '-Connect').code).not.toBe(0);
+  }, 180_000);
+});
+
+describe('install.ps1 first install detection (FINDING-002)', () => {
+  winOnly('does not connect when the VerdictLite home or the disconnect marker exists, and -Connect still forces it', () => {
+    const pack = run(process.execPath, [join(ROOT, 'scripts', 'pack.mjs')]);
+    expect(pack.code, pack.out).toBe(0);
+    const zip = join(ROOT, 'release', 'verdictlite.zip');
+    const profile = tempDir('installer-first-');
+    mkdirSync(join(profile, '.claude'));
+    const vhome = join(profile, 'vhome');
+    const env = { ...process.env, USERPROFILE: profile, HOME: profile, CODEX_HOME: join(profile, '.codex'), LOCALAPPDATA: join(profile, 'local'), VLITE_HOME: vhome };
+    const settings = join(profile, '.claude', 'settings.json');
+    // a fresh install folder each time, so only the home folder and the marker can say it is not a first install
+    const go = (...extra: string[]): { code: number; out: string } => {
+      const dir = join(tempDir('installer-first-app-'), 'app');
+      const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ZipPath', zip, '-InstallDir', dir, '-NoPath', ...extra], { cwd: ROOT, encoding: 'utf8', env });
+      return { code: r.status ?? -1, out: `${r.stdout}${r.stderr}` };
+    };
+
+    // The home folder exists (a past install, app folder gone): not a first install.
+    mkdirSync(vhome);
+    const home = go();
+    expect(home.code, home.out).toBe(0);
+    expect(home.out).toContain('not a first install');
+    expect(home.out).toContain('did not run vlite connect');
+    expect(home.out).not.toContain('approve the hook');
+    expect(existsSync(settings)).toBe(false);
+
+    // The marker says the person disconnected on purpose.
+    writeFileSync(join(vhome, 'connect-off.json'), '{"apps":["claude"]}');
+    const marker = go();
+    expect(marker.code, marker.out).toBe(0);
+    expect(marker.out).toContain('disconnected VerdictLite on purpose');
+    expect(existsSync(settings)).toBe(false);
+
+    // -Connect still forces it.
+    const forced = go('-Connect');
+    expect(forced.code, forced.out).toBe(0);
+    expect(forced.out).toContain('-Connect: running vlite connect');
+    expect(forced.out).toContain('approve the hook');
+    expect(existsSync(settings)).toBe(true);
+    expect(existsSync(join(vhome, 'connect-off.json'))).toBe(false); // a plain connect removes the marker
   }, 180_000);
 });

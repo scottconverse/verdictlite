@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tempDir } from './root.js';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_BLOCKED_TOOLS, CODEX_READONLY_ARGS, isClaudeCommand, parseReply, reviewerArgs } from '../src/review.js';
+import { CLAUDE_BLOCKED_TOOLS, CODEX_LOCKOUT_ARGS, CODEX_READONLY_ARGS, isClaudeCommand, parseReply, reviewerArgs } from '../src/review.js';
 import { baseConfig, makeRepo, type Repo } from './helpers.js';
 
 /** Fake reviewer: saves the prompt it got, then prints the reply file. */
@@ -185,9 +185,20 @@ describe('review prompt and Claude Code limits (finding 006)', () => {
     for (const c of ['codex', 'codex.cmd', '"C:\\Users\\a b\\codex.exe"', '/usr/local/bin/codex', "'C:/x/Codex.CMD'"]) expect(reviewerArgs(c, ['exec']), c).toEqual(ro);
     expect(reviewerArgs('codex', ['exec', '-'])).toEqual(['exec', '-', ...CODEX_READONLY_ARGS]);
     expect(reviewerArgs('codex', ['-m', 'x', 'exec'])).toEqual(['-m', 'x', 'exec', ...CODEX_READONLY_ARGS]);
+    // A sandbox flag the user set is kept, with no second sandbox argument, but the tool lockout is always added.
     for (const a of [['--sandbox', 'workspace-write'], ['--sandbox=danger-full-access'], ['-s', 'workspace-write'], ['--full-auto'], ['--dangerously-bypass-approvals-and-sandbox']]) {
-      expect(reviewerArgs('codex', ['exec', ...a]), a.join(' ')).toEqual(['exec', ...a]);
+      expect(reviewerArgs('codex', ['exec', ...a]), a.join(' ')).toEqual(['exec', ...a, ...CODEX_LOCKOUT_ARGS]);
+      expect(reviewerArgs('codex', ['exec', ...a]).filter((x) => x === '--sandbox' || x === '-s').length).toBeLessThanOrEqual(1);
     }
+    expect(reviewerArgs('codex', ['exec', '--sandbox', 'read-only'])).toEqual(['exec', '--sandbox', 'read-only', ...CODEX_LOCKOUT_ARGS]);
+    // `e` is the alias of `exec`, but only as the subcommand, not as the value of a flag
+    expect(reviewerArgs('codex', ['e'])).toEqual(['e', ...CODEX_READONLY_ARGS]);
+    expect(reviewerArgs('codex', ['-m', 'e', 'exec'])).toEqual(['-m', 'e', 'exec', ...CODEX_READONLY_ARGS]);
+    expect(reviewerArgs('codex', ['-m', 'e', 'login'])).toEqual(['-m', 'e', 'login']);
+    expect(reviewerArgs('codex', ['-m', 'exec'])).toEqual(['-m', 'exec']);
+    // newer Codex flags that take a value must not be taken for the subcommand
+    expect(reviewerArgs('codex', ['--remote', 'x', 'exec'])).toEqual(['--remote', 'x', 'exec', ...CODEX_READONLY_ARGS]);
+    expect(reviewerArgs('codex', ['--thread-source', 'x', 'e'])).toEqual(['--thread-source', 'x', 'e', ...CODEX_READONLY_ARGS]);
     expect(reviewerArgs('codex', ['login'])).toEqual(['login']);
     expect(reviewerArgs('codex', [])).toEqual([]);
     expect(reviewerArgs('codexx', ['exec'])).toEqual(['exec']);

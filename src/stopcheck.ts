@@ -205,6 +205,9 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const tree = worktreeTree(root);
   const state = readState(ctx.stateDir);
   const branch = stateKey(root);
+  // A run with skipped parts saved its warning for this exact tree: repeat it at once, without rerunning checks.
+  const skippedHere = state.skippedPass?.[branch];
+  if (skippedHere && skippedHere.tree === tree) return { kind: 'warn', message: skippedHere.message };
   const last = state.lastPassTree?.[branch];
   if (last === tree) return { kind: 'pass' };
 
@@ -220,20 +223,30 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
   const changed = changedFiles(root, from, tree);
   const base = { session, tree, branch, from, changed: changed.length, hookActive };
 
-  const pass = (extra: object): void => {
+  const pass = (extra: object, warning?: string): void => {
+    const skippedRun = !!(extra as { skipped?: object }).skipped;
     saveState(ctx.stateDir, (s) => {
-      s.lastPassTree = { ...s.lastPassTree, [branch]: tree };
-      if (head) s.lastPassHead = { ...s.lastPassHead, [branch]: head };
+      if (skippedRun) {
+        // A run with a skipped part is not a pass: the start point stays, so the skipped files are judged again later.
+        s.skippedPass = { ...s.skippedPass, [branch]: { tree, message: warning ?? 'VerdictLite: some checks did NOT run.' } };
+      } else {
+        s.lastPassTree = { ...s.lastPassTree, [branch]: tree };
+        if (head) s.lastPassHead = { ...s.lastPassHead, [branch]: head };
+        if (s.skippedPass) {
+          const { [branch]: _gone, ...rest } = s.skippedPass;
+          s.skippedPass = rest;
+        }
+      }
       // This session's rounds on this branch, and its old-format keys (one key per set of failing checks).
       for (const k of Object.keys(s.rounds)) if (k === roundKey(session, branch) || (k.startsWith(`${session}|`) && !k.startsWith(`${session}|branch:`))) delete s.rounds[k];
     });
     ctx.log('stop', { ...base, result: 'pass', ...extra });
-    // A pass on this exact tree counts as proof at commit, but only when a check really ran and no part was skipped.
-    // A failed stamp write never turns a pass into an error.
+    // A pass on this exact tree counts as proof at commit, but only when a check really ran in full: no part skipped,
+    // and no narrow run (only the changed test files ran, which is not proof). A failed stamp write never turns a pass into an error.
     const e = extra as { ran?: string[]; skipped?: object; narrow?: object };
-    if (!e.ran || e.ran.length === 0 || e.skipped) return;
+    if (!e.ran || e.ran.length === 0 || e.skipped || e.narrow) return;
     try {
-      writeStamp(ctx, 'stop-check', 'pass', [], e.narrow ? 'stop-check pass (narrow: only changed test files ran)' : 'stop-check pass', tree);
+      writeStamp(ctx, 'stop-check', 'pass', [], 'stop-check pass', tree);
     } catch (e) {
       process.stderr.write(`VerdictLite: could not write stop-check stamp (ignored): ${(e as Error).message}
 `);
@@ -332,8 +345,9 @@ async function judge(ctx: Ctx, session: string, hookActive: boolean): Promise<Ve
     return { kind: 'warn', message: [...timeoutWarnings, ...plan.tooMany.map((t) => tooManyMessage(t, true)), ...info].join('\n') };
   }
   if (failures.length === 0) {
-    pass({ ran, ...extra });
     const lines = [...plan.tooMany.map((t) => tooManyMessage(t, true)), ...info];
+    if (Object.keys(narrowRuns).length > 0) lines.push('VerdictLite: this narrow pass is not commit proof. The commit gate needs a full check or "vlite stamp verify".');
+    pass({ ran, ...extra }, lines.join('\n'));
     if (lines.length > 0) return { kind: 'warn', message: lines.join('\n') };
     return { kind: 'pass' };
   }
