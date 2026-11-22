@@ -42,7 +42,7 @@ VerdictLite puts a simple check at each of those points:
 | The agent stops without running the checks. | A Claude Code Stop hook (`vlite stop-check`) runs your checks for the parts of the repo that changed. If one fails, the stop is blocked and the agent gets the error. |
 | A failing test gets skipped, slowed, retried or deleted. | A built-in test-tamper check looks at changed lines in test files. It flags added skips, fixed sleeps, retries and removed tests. |
 | The agent tries the same broken fix forever. | Failed rounds are counted for each session and branch. After three, the session ends and a person is asked to look. |
-| A commit gives no sign of how it was checked. | Git hooks add a `Verified-By:` line to every commit message. |
+| A commit gives no sign of how it was checked. | Git hooks add a `Verified-By:` line to every commit message when the gate is on (`observe` or `enforce`). |
 | A change loosens the rules that judge it. | The config and the review rules are read from the base branch, not from the change. The tool and its logs live outside the repo. The commands the config runs (package.json scripts, pyproject, ruff, mypy, eslint configs) come from the working tree. |
 
 Two parts, two scopes:
@@ -113,8 +113,10 @@ The installer prints the approve step only when it connected the apps.
 To connect or disconnect the apps later, run `vlite connect` or
 `vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
 `--uninstall` always removes VerdictLite's entry from Codex `hooks.json`, also when
-`config.toml` has a `[hooks]` table. If `config.toml` mentions `stop-check`, it
-tells you to remove that hook by hand. `--uninstall` also writes
+`config.toml` has a `[hooks]` table. If `config.toml` defines hooks and mentions
+`stop-check`, it tells you to remove that hook by hand. A plain `vlite connect`
+does not write `hooks.json` when `config.toml` already defines hooks; it prints
+the hook to add there by hand. `--uninstall` also writes
 `connect-off.json` in the VerdictLite home, so the installer does not connect
 again on its own. A plain `vlite connect` removes that marker.
 If VerdictLite's own hook entry has an old path or timeout (for example after
@@ -224,10 +226,11 @@ It does not write them.
 ```
 
 The timeout is in seconds. `vlite connect` and `vlite install --claude` both
-write 3600. Checks run one at a time, so make the timeout longer than all your
-checks together. `vlite install` prints a warning when the check timeouts in
-`vlite.json` add up to more than 3600 s. A template part counts its checks
-times `maxExpandedParts`. If the app kills the hook, no verdict is written.
+use 3600 in the settings they write or print. Checks run one at a time, so make
+the timeout longer than all your checks together. `vlite install` prints a
+warning when the check timeouts in `vlite.json` add up to more than 3600 s. A
+template part counts its checks times `maxExpandedParts`. If the app kills the
+hook, no verdict is written.
 
 A project hook loads only when a Claude Code session starts inside the repo.
 If your sessions or agent workers start in another folder and edit the repo
@@ -241,9 +244,11 @@ with `--global`:
 `--global` checks every repo with a `vlite.json` that the session edited with
 its edit tools (Edit, Write, MultiEdit, NotebookEdit) since your last prompt.
 It also checks the session folder's repo, unless that repo has its own project
-hook. In folders and repos without a `vlite.json` it does nothing. Limit: a file
-changed only by a shell command is not seen, unless the session started in that
-repo.
+hook. VerdictLite finds a project hook only in `.claude/settings.json`, so a
+hook kept only in `.claude/settings.local.json` is not seen, and that repo is
+checked twice under `--global`. In folders and repos without a `vlite.json` it
+does nothing. Limit: a file changed only by a shell command is not seen, unless
+the session started in that repo.
 
 **6. Add a verify skill** (recommended). A
 [Claude Code skill](https://code.claude.com/docs/en/skills) at
@@ -261,7 +266,8 @@ example skill.
 
 ## The five commands
 
-Every command takes `--repo DIR`. The default is the current folder.
+Commands that work on a repo take `--repo DIR`. The default is the current
+folder.
 
 ### `vlite install [--claude] [--uninstall]`
 
@@ -432,7 +438,7 @@ Runs one AI review round on the diff from the merge-base to the working tree.
   tools. If your `review.args` already has `--disallowedTools`, your value is
   kept. When the command is Codex (`codex`) and its subcommand is `exec` (or its alias `e`; the first
 argument that is not a flag or a flag's value), VerdictLite always turns off the Codex tools that can
-write (shell, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
+write (shell, code host, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
 `review.args` sets no sandbox (`--sandbox`, `-s`, `--full-auto` or `--dangerously-bypass-approvals-and-sandbox`).
 If you set a sandbox, your choice is kept and the tool lockout is added anyway. For any
   other command, only the prompt says "read-only". VerdictLite cannot block
@@ -444,6 +450,7 @@ If you set a sandbox, your choice is kept and the tool lockout is added anyway. 
 | Result | Exit code | Stamp |
 |---|---|---|
 | No `important` findings | 0 | A `code-review` pass stamp |
+| No `important` findings, but the diff was cut at 200 KB or `REVIEW.md` was missing on the base branch | 2 | None |
 | One or more `important` findings | 2 | None |
 | Reviewer failed, timed out or replied badly | 1 | None. The raw reply is saved. |
 
@@ -545,9 +552,11 @@ Notes:
   another `base` that has its own `vlite.json`, that copy is used.
 - If the base has no `vlite.json` yet, the working-tree copy is used, a warning
   is printed and every log line says `"configSource": "worktree"`.
-- With no config anywhere, every command exits 0 and does nothing.
+- With no config anywhere, every command that reads the config exits 0 and does
+  nothing.
 - Globs match from the repo root. `**` is any number of folders, `*` is any
-  text inside one name, `?` is one character.
+  text inside one name, `?` is one character. `{a,b}` matches either name, as
+  in `**/*.{spec,test}.ts`.
 - A file is docs when it matches `docs` and does not match `codeDespiteDocs`.
 
 ### Part templates
@@ -592,7 +601,8 @@ worktrees of one repo share the folder.
 
 | File | What it holds |
 |---|---|
-| `state.json` | Last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history), round counters, pending gate records, recent blocks. |
+| `state.json` | Last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
+| `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
 | `stop.jsonl` | One line per stop check. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |

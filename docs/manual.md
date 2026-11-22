@@ -103,8 +103,10 @@ The installer prints the approve step only when it connected the apps.
 To connect or disconnect the apps later, run `vlite connect` or
 `vlite connect --uninstall`. Add `--claude` or `--codex` to pick one app.
 `--uninstall` always removes VerdictLite's entry from Codex `hooks.json`, also when
-`config.toml` has a `[hooks]` table. If `config.toml` mentions `stop-check`, it
-tells you to remove that hook by hand. `--uninstall` also writes
+`config.toml` has a `[hooks]` table. If `config.toml` defines hooks and mentions
+`stop-check`, it tells you to remove that hook by hand. A plain `vlite connect`
+does not write `hooks.json` when `config.toml` already defines hooks; it prints
+the hook to add there by hand. `--uninstall` also writes
 `connect-off.json` in the VerdictLite home, so the installer does not connect
 again on its own. A plain `vlite connect` removes that marker.
 If VerdictLite's own hook entry has an old path or timeout (for example after
@@ -266,9 +268,9 @@ Merge this into `.claude/settings.json` in the repo (or into
 }
 ```
 
-`timeout` is in seconds. `vlite connect` and `vlite install --claude` both write
-3600. It must be longer than your checks put together, because they run one at a
-time. `vlite install` prints a warning when the check timeouts in `vlite.json`
+`timeout` is in seconds. `vlite connect` and `vlite install --claude` both use
+3600 in the settings they write or print. It must be longer than your checks put
+together, because they run one at a time. `vlite install` prints a warning when the check timeouts in `vlite.json`
 add up to more than 3600 s (a template part counts its checks times
 `maxExpandedParts`). If the app kills the hook, no verdict is written. If `vlite` is not on PATH, `vlite install --claude` prints a full
 command to use instead, for example:
@@ -310,7 +312,9 @@ What `--global` does on each stop:
    edited with Edit, Write, MultiEdit or NotebookEdit since your last prompt.
 2. It finds the git repo of each file. It keeps only repos with a `vlite.json`.
 3. It adds the session folder's repo, unless that repo has its own project
-   hook (that hook already checks it, so it does not run twice).
+   hook in `.claude/settings.json` (that hook already checks it, so it does not
+   run twice). A hook kept only in `.claude/settings.local.json` is not seen,
+   so that repo is checked twice.
 4. It adds any repo that blocked on this session's last stop, so a fix is
    checked again.
 5. It runs the normal stop check on each repo and sends one combined message.
@@ -419,7 +423,8 @@ A run with a skipped part (a missing `requires` path, or too many modules) is no
 a pass. VerdictLite does not move its saved pass, so the skipped files are
 judged again as soon as the part can run. It never blocks and never writes a
 stamp for that run, and it repeats the same warning at each stop on the same
-files, without running the checks again. Only `vlite stamp` and a clean `vlite review` write stamps.
+files, without running the checks again. A skipped run writes no stamp. Stamps
+come from `vlite stamp`, a clean `vlite review`, or a full passing stop check.
 
 ## 5. Read a block message
 
@@ -493,7 +498,7 @@ it yourself, give the agent a hint, or change the check.
 ## 7. Stamps and the Verified-By trailer
 
 A **stamp** is a line in a log that says "this check ran on this exact tree and
-it passed (or failed)". There are two kinds:
+it passed (or failed)". There are three kinds:
 
 - `verify`: written by you or your verify skill with `vlite stamp verify`.
 - `code-review`: written by `vlite review` when it finds nothing important.
@@ -644,7 +649,7 @@ What it does:
    tools. If your `review.args` already has `--disallowedTools`, your value is
    kept. When the command is Codex (`codex`) and its subcommand is `exec` (or its alias `e`; the first
 argument that is not a flag or a flag's value), VerdictLite always turns off the Codex tools that can
-write (shell, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
+write (shell, code host, sub-agents, apps, plugins, MCP and apply_patch). It adds `--sandbox read-only` only when your
 `review.args` sets no sandbox (`--sandbox`, `-s`, `--full-auto` or `--dangerously-bypass-approvals-and-sandbox`).
 If you set a sandbox, your choice is kept and the tool lockout is added anyway. For any
    other command, only the prompt says "read-only". VerdictLite cannot block
@@ -665,6 +670,7 @@ Results and exit codes:
 | Result | Exit code | Stamp |
 |---|---|---|
 | No `important` findings | 0 | A `code-review` pass stamp for the current tree |
+| No `important` findings, but the diff was cut at 200 KB or `REVIEW.md` was missing on the base branch | 2 | None |
 | One or more `important` findings | 2 | None |
 | The reviewer failed, timed out or did not reply with the JSON asked for | 1 | None. The raw reply is saved. |
 
@@ -687,7 +693,8 @@ It looks at **added and removed lines** in changed test files. It fails on:
 
 - **Added skip markers:** `@pytest.mark.skip`, `pytest.skip(`, `@unittest.skip`,
   `xfail`, `.skip(`, `it.skip`, `test.skip`, `describe.skip`, `xit(`,
-  `xdescribe(`, `xtest(`, `test.fixme`.
+  `xdescribe(`, `xtest(`, `test.fixme`, `it.only`, `test.only`,
+  `describe.only`, `fit(`, `fdescribe(`, `pytest.importorskip(`.
   A platform guard is not a skip. This is a conditional skip whose only condition
   is the operating system, for example
   `@pytest.mark.skipif(os.name != "nt", reason="...")`,
@@ -784,7 +791,8 @@ repo share it.
 
 | File | What it holds |
 |---|---|
-| `state.json` | The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history), round counters, pending gate records, recent blocks. |
+| `state.json` | The last passing tree per branch (per worktree folder for a detached HEAD, reused only while the saved commit is still in HEAD's history) and per part, the failed-test ids to rerun at the next stop, round counters, pending gate records, recent blocks. |
+| `sessions/<session>.json` | The repos a session's last block was about, checked again at its next stop. |
 | `stop.jsonl` | One line per stop check: pass, block, handoff or error. |
 | `stamps.jsonl` | One line per stamp. |
 | `gate.jsonl` | One line per gate decision. |
@@ -814,7 +822,8 @@ default branch has another name, such as `master`, VerdictLite 0.1.15 will not
 find the config there and stays in bootstrap mode.
 
 **Nothing happens at all.**
-With no `vlite.json` anywhere, every command exits 0 and does nothing. Check
+With no `vlite.json` anywhere, every command that reads the config exits 0 and
+does nothing. Check
 that you are in the right repo and that the file is named `vlite.json`.
 
 **My old git hooks.**
@@ -900,6 +909,7 @@ one-line warning.
   `src/lib/a.js`.
 - `?` matches one character.
 - `dir/**` matches everything under `dir`.
+- `{a,b}` matches either name, as in `**/*.{spec,test}.ts`.
 
 A file is docs when it matches `docs` and does not match `codeDespiteDocs`.
 
@@ -938,7 +948,8 @@ for each module that changed. `{name}` stands for one folder name.
 - `{name}` is filled in the part's `name`, `paths`, `requires` and `cwd`, and
   in each check's `run` and `cwd`. Other text in braces is left alone.
 - `{name}` in a part whose paths have no `{name}` is an error. `{name}` is the
-  only placeholder. Any other `{...}` in `paths` is an error.
+  only placeholder. A brace token without a comma, such as `{...}`, in `paths`
+  is an error.
 - The changed file must be inside the folder. With `src/{name}/**`,
   `src/a/x.py` gives `a`. `src/x.py` gives nothing.
 - **Safe names only.** The folder name goes into a shell command. It is used
@@ -1047,7 +1058,8 @@ commit proof.
 
 ## 16. Command reference
 
-Every command takes `--repo DIR`. The default is the current folder.
+Commands that work on a repo take `--repo DIR`. The default is the current
+folder.
 
 | Command | What it does |
 |---|---|
@@ -1065,6 +1077,8 @@ Environment variables:
 
 - `VLITE_HOME`: where state lives. Default `~/.verdictlite`.
 - `VLITE_REVIEW_CMD`: replaces `review.command`.
+- `VLITE_REVIEWER`: set to `1` by VerdictLite for the reviewer; the stop check
+  does nothing in that session.
 
 ## 17. FAQ
 
